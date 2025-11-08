@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
+import { ChevronLeft, Building, User, Rocket, Handshake, Sparkles } from 'lucide-react'
 import { z } from 'zod'
 import { useConversationStore } from '@/stores/conversationStore'
 import type { FoundationData } from '@/types/conversation'
@@ -23,20 +24,56 @@ const foundationSchema = z.object({
 type FoundationFormData = z.infer<typeof foundationSchema>
 
 const websiteTypes = [
-  { value: 'business', label: 'Business Website', icon: '🏢' },
-  { value: 'personal', label: 'Personal/Portfolio', icon: '👤' },
-  { value: 'project', label: 'Project/Campaign', icon: '🚀' },
-  { value: 'nonprofit', label: 'Non-Profit Organization', icon: '❤️' },
-  { value: 'other', label: 'Other', icon: '✨' },
+  { value: 'business', label: 'Business Website', icon: Building },
+  { value: 'personal', label: 'Personal/Portfolio', icon: User },
+  { value: 'project', label: 'Project/Campaign', icon: Rocket },
+  { value: 'nonprofit', label: 'Non-Profit Organization', icon: Handshake },
+  { value: 'other', label: 'Other', icon: Sparkles },
 ]
 
 export default function FoundationForm() {
   const router = useRouter()
-  const { setFoundation } = useConversationStore()
+  const { setFoundation, userName, userEmail, userPhone, websiteType } = useConversationStore()
   
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<Partial<FoundationFormData>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const phoneInputRef = useRef<HTMLInputElement>(null)
+  const initializedRef = useRef(false)
+
+  // Initialize form data from store on mount (only once)
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true
+      
+      // Check if websiteType is a custom "other" description
+      const validTypes = ['business', 'personal', 'project', 'nonprofit', 'other']
+      const isCustomOther = websiteType && !validTypes.includes(websiteType)
+      
+      // Only initialize if store has data
+      if (userName || userEmail || userPhone || websiteType) {
+        setFormData({
+          userName: userName || '',
+          userEmail: userEmail || '',
+          userPhone: userPhone || '',
+          websiteType: isCustomOther ? 'other' : (websiteType || undefined),
+          otherDescription: isCustomOther ? websiteType : undefined,
+        })
+        
+        // Determine current step based on what data exists
+        if (websiteType) {
+          setCurrentStep(4)
+        } else if (userPhone) {
+          setCurrentStep(3)
+        } else if (userEmail) {
+          setCurrentStep(2)
+        } else if (userName) {
+          setCurrentStep(2)
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount - store values are stable
 
   const handleNext = () => {
     // Validate current step
@@ -58,11 +95,48 @@ export default function FoundationForm() {
     setErrors(newErrors)
     
     if (isValid) {
+      // Save current step data to store before moving forward
+      if (currentStep === 1 && formData.userName) {
+        setFoundation({
+          userName: formData.userName,
+          userEmail: '',
+          userPhone: '',
+          websiteType: '',
+        })
+      } else if (currentStep === 2 && formData.userEmail) {
+        setFoundation({
+          userName: formData.userName || '',
+          userEmail: formData.userEmail,
+          userPhone: '',
+          websiteType: '',
+        })
+      } else if (currentStep === 3) {
+        setFoundation({
+          userName: formData.userName || '',
+          userEmail: formData.userEmail || '',
+          userPhone: formData.userPhone || '',
+          websiteType: '',
+        })
+      }
+      
       if (currentStep < 4) {
         setCurrentStep(currentStep + 1)
       } else {
         handleSubmit()
       }
+    }
+  }
+
+  const handleBack = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1)
+      // Clear errors when going back
+      setErrors({})
     }
   }
 
@@ -103,17 +177,116 @@ export default function FoundationForm() {
     }
   }
 
+  const formatPhoneNumber = (value: string): string => {
+    // Remove all non-digit characters
+    const digits = value.replace(/\D/g, '')
+    
+    // Limit to 10 digits
+    const limitedDigits = digits.slice(0, 10)
+    
+    // Format based on length
+    if (limitedDigits.length === 0) {
+      return ''
+    } else if (limitedDigits.length <= 3) {
+      return `(${limitedDigits}`
+    } else if (limitedDigits.length <= 6) {
+      return `(${limitedDigits.slice(0, 3)}) ${limitedDigits.slice(3)}`
+    } else {
+      return `(${limitedDigits.slice(0, 3)}) ${limitedDigits.slice(3, 6)}-${limitedDigits.slice(6)}`
+    }
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+    
+    // Format the new value
+    const formatted = formatPhoneNumber(newValue)
+    
+    // Count digits in formatted string to place cursor after last digit
+    const digitCount = formatted.replace(/\D/g, '').length
+    let newCursorPos = formatted.length
+    
+    // Find position right after the last digit
+    if (digitCount > 0) {
+      let digitIndex = 0
+      for (let i = 0; i < formatted.length; i++) {
+        if (/\d/.test(formatted[i])) {
+          digitIndex++
+          if (digitIndex === digitCount) {
+            newCursorPos = i + 1
+            break
+          }
+        }
+      }
+    }
+    
+    setFormData({ ...formData, userPhone: formatted })
+    
+    // Restore cursor position after state update using double requestAnimationFrame for reliability
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const input = phoneInputRef.current || e.target
+        if (input) {
+          input.setSelectionRange(newCursorPos, newCursorPos)
+        }
+      })
+    })
+  }
+
+  const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Handle Enter key
+    if (e.key === 'Enter') {
+      handleNext()
+      return
+    }
+
+    // Handle backspace - remove last digit
+    if (e.key === 'Backspace' && formData.userPhone) {
+      const digits = formData.userPhone.replace(/\D/g, '')
+      if (digits.length > 0) {
+        e.preventDefault()
+        const newDigits = digits.slice(0, -1)
+        const formatted = formatPhoneNumber(newDigits)
+        setFormData({ ...formData, userPhone: formatted })
+        // Set cursor position after formatting
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const input = phoneInputRef.current || e.currentTarget
+            if (input) {
+              const digitCount = formatted.replace(/\D/g, '').length
+              let newPos = formatted.length
+              if (digitCount > 0) {
+                let digitIndex = 0
+                for (let i = 0; i < formatted.length; i++) {
+                  if (/\d/.test(formatted[i])) {
+                    digitIndex++
+                    if (digitIndex === digitCount) {
+                      newPos = i + 1
+                      break
+                    }
+                  }
+                }
+              }
+              input.setSelectionRange(newPos, newPos)
+            }
+          })
+        })
+      } else if (formData.userPhone === '(') {
+        // If only "(" remains, clear it
+        e.preventDefault()
+        setFormData({ ...formData, userPhone: '' })
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-lg">
         {/* Progress Indicator */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-gray-600">
               Step {currentStep} of 4
-            </span>
-            <span className="text-sm text-gray-600">
-              Foundation Questions
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -139,7 +312,7 @@ export default function FoundationForm() {
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
                     What's your name?
                   </h2>
                   <p className="text-gray-600">
@@ -163,7 +336,7 @@ export default function FoundationForm() {
                   )}
                 </div>
 
-                <Button onClick={handleNext} className="w-full">
+                <Button onClick={handleNext} type="button" className="w-full" size="lg">
                   Continue
                 </Button>
               </motion.div>
@@ -203,9 +376,19 @@ export default function FoundationForm() {
                   )}
                 </div>
 
-                <Button onClick={handleNext} className="w-full">
-                  Continue
-                </Button>
+                <div className="space-y-4">
+                  <Button onClick={handleNext} type="button" className="w-full" size="lg">
+                    Continue
+                  </Button>
+                  <button
+                    onClick={handleBack}
+                    type="button"
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 transition-colors"
+                  >
+                    <ChevronLeft className="w-3 h-3 mr-1" />
+                    Back
+                  </button>
+                </div>
               </motion.div>
             )}
 
@@ -230,26 +413,38 @@ export default function FoundationForm() {
                 <div className="space-y-2">
                   <Input
                     id="userPhone"
+                    ref={phoneInputRef}
                     type="tel"
                     placeholder="(555) 123-4567"
                     value={formData.userPhone || ''}
-                    onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
-                    onKeyDown={handleKeyPress}
+                    onChange={handlePhoneChange}
+                    onKeyDown={handlePhoneKeyDown}
                     autoFocus
                   />
                 </div>
 
-                <div className="space-y-3">
-                  <Button onClick={handleNext} className="w-full">
-                    Continue
-                  </Button>
-                  <Button 
-                    onClick={handleNext} 
-                    variant="ghost" 
-                    className="w-full"
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <Button onClick={handleNext} type="button" className="w-full" size="lg">
+                      Continue
+                    </Button>
+                    <Button 
+                      onClick={handleNext}
+                      type="button"
+                      variant="ghost" 
+                      className="w-full"
+                    >
+                      Skip
+                    </Button>
+                  </div>
+                  <button
+                    onClick={handleBack}
+                    type="button"
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 transition-colors"
                   >
-                    Skip
-                  </Button>
+                    <ChevronLeft className="w-3 h-3 mr-1" />
+                    Back
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -262,6 +457,13 @@ export default function FoundationForm() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && formData.websiteType) {
+                    e.preventDefault()
+                    handleNext()
+                  }
+                }}
+                tabIndex={0}
               >
                 <div>
                   <h2 className="text-2xl font-semibold text-gray-900 mb-2">
@@ -276,19 +478,22 @@ export default function FoundationForm() {
                   value={formData.websiteType}
                   onValueChange={(value) => setFormData({ ...formData, websiteType: value as any })}
                 >
-                  {websiteTypes.map((type) => (
-                    <div key={type.value} className="flex items-center space-x-3 mb-3">
-                      <RadioGroupItem value={type.value} id={type.value} />
-                      <Label 
-                        htmlFor={type.value}
-                        className="flex items-center gap-2 cursor-pointer flex-1 p-3 
-                                 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="text-xl">{type.icon}</span>
-                        <span className="text-base">{type.label}</span>
-                      </Label>
-                    </div>
-                  ))}
+                  {websiteTypes.map((type) => {
+                    const IconComponent = type.icon
+                    return (
+                      <div key={type.value} className="flex items-center space-x-3 mb-3">
+                        <RadioGroupItem value={type.value} id={type.value} />
+                        <Label 
+                          htmlFor={type.value}
+                          className="flex items-center gap-2 cursor-pointer flex-1 p-3 
+                                   rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <IconComponent className="w-5 h-5 text-gray-600" />
+                          <span className="text-base">{type.label}</span>
+                        </Label>
+                      </div>
+                    )
+                  })}
                 </RadioGroup>
 
                 {formData.websiteType === 'other' && (
@@ -306,18 +511,31 @@ export default function FoundationForm() {
                         ...formData, 
                         otherDescription: e.target.value 
                       })}
+                      onKeyDown={handleKeyPress}
                       autoFocus
                     />
                   </motion.div>
                 )}
 
-                <Button 
-                  onClick={handleNext} 
-                  className="w-full"
-                  disabled={!formData.websiteType}
-                >
-                  Start Conversation
-                </Button>
+                <div className="space-y-4">
+                  <Button 
+                    onClick={handleNext}
+                    type="button"
+                    className="w-full"
+                    size="lg"
+                    disabled={!formData.websiteType}
+                  >
+                    Start Conversation
+                  </Button>
+                  <button
+                    onClick={handleBack}
+                    type="button"
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 transition-colors"
+                  >
+                    <ChevronLeft className="w-3 h-3 mr-1" />
+                    Back
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
