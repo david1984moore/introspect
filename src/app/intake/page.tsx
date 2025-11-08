@@ -47,8 +47,8 @@ export default function FoundationForm() {
       initializedRef.current = true
       
       // Check if websiteType is a custom "other" description
-      const validTypes = ['business', 'personal', 'project', 'nonprofit', 'other']
-      const isCustomOther = websiteType && !validTypes.includes(websiteType)
+      const validTypes: Array<'business' | 'personal' | 'project' | 'nonprofit' | 'other'> = ['business', 'personal', 'project', 'nonprofit', 'other']
+      const isCustomOther = websiteType && typeof websiteType === 'string' && !validTypes.includes(websiteType as 'business' | 'personal' | 'project' | 'nonprofit' | 'other')
       
       // Only initialize if store has data
       if (userName || userEmail || userPhone || websiteType) {
@@ -56,7 +56,7 @@ export default function FoundationForm() {
           userName: userName || '',
           userEmail: userEmail || '',
           userPhone: userPhone || '',
-          websiteType: isCustomOther ? 'other' : (websiteType || undefined),
+          websiteType: isCustomOther ? 'other' : (typeof websiteType === 'string' && validTypes.includes(websiteType as 'business' | 'personal' | 'project' | 'nonprofit' | 'other') ? websiteType as 'business' | 'personal' | 'project' | 'nonprofit' | 'other' : undefined),
           otherDescription: isCustomOther ? websiteType : undefined,
         })
         
@@ -476,7 +476,7 @@ export default function FoundationForm() {
                 
                 <RadioGroup
                   value={formData.websiteType}
-                  onValueChange={(value) => setFormData({ ...formData, websiteType: value as any })}
+                  onValueChange={(value) => setFormData({ ...formData, websiteType: value as 'business' | 'personal' | 'project' | 'nonprofit' | 'other' })}
                 >
                   {websiteTypes.map((type) => {
                     const IconComponent = type.icon
