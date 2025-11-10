@@ -68,6 +68,7 @@ interface ConversationState {
   featureRecommendations: FeatureRecommendation[] | null
   packageRecommendation: PackageRecommendation | null
   showingFeatureSelection: boolean
+  packageTier: 'Starter' | 'Professional' | 'Custom' // Phase 6: Package tier for feature pricing
   
   // Security & Monitoring
   lastActivity: Date
@@ -109,6 +110,7 @@ interface ConversationState {
   submitAnswer: (answer: string, questionId: string) => Promise<void>
   updateScopeProgress: (progress: Partial<ScopeProgress>) => void
   submitFeatureSelection: (selectedFeatureIds: string[]) => Promise<void>
+  calculatePackageTier: () => 'Starter' | 'Professional' | 'Custom' // Phase 6: Calculate package tier
 }
 
 // Enhanced input validation with prompt injection detection
@@ -218,6 +220,7 @@ export const useConversationStore = create<ConversationState>()(
       featureRecommendations: null,
       packageRecommendation: null,
       showingFeatureSelection: false,
+      packageTier: 'Professional', // Default, calculated dynamically
       lastActivity: new Date(),
       ipAddress: null,
       suspiciousActivityCount: 0,
@@ -611,6 +614,7 @@ export const useConversationStore = create<ConversationState>()(
           featureRecommendations: null,
           packageRecommendation: null,
           showingFeatureSelection: false,
+          packageTier: 'Professional',
           lastActivity: new Date(),
           ipAddress: null,
           suspiciousActivityCount: 0,
@@ -785,6 +789,7 @@ export const useConversationStore = create<ConversationState>()(
               featureRecommendations: featureRecs,
               packageRecommendation: packageRec,
               showingFeatureSelection: true,
+              packageTier: pkg === 'starter' ? 'Starter' : pkg === 'professional' ? 'Professional' : 'Custom',
               currentQuestion: null,
               isTyping: false,
             })
@@ -880,16 +885,51 @@ export const useConversationStore = create<ConversationState>()(
         }))
       },
       
+      // Phase 6: Calculate package tier based on intelligence
+      calculatePackageTier: () => {
+        const state = get()
+        const intelligence = state.intelligence
+        
+        // Simple logic (in production, this would be more sophisticated)
+        if (intelligence.budgetRange === 'under_5k' || intelligence.budgetRange === 'under_5000') {
+          return 'Starter'
+        } else if (intelligence.budgetRange === '5k_to_10k' || intelligence.budgetRange === '5000_to_10000') {
+          return 'Professional'
+        } else {
+          return 'Custom'
+        }
+      },
+      
       submitFeatureSelection: async (selectedFeatureIds) => {
         const state = get()
         
-        if (!state.featureRecommendations || !state.packageRecommendation) {
-          console.error('No feature recommendations available')
-          return
-        }
+        // Phase 6: Use new feature library system
+        // Calculate package tier if not already set
+        const packageTier = state.packageTier || get().calculatePackageTier()
         
-        // Update feature selection
+        // Import feature library for pricing calculation
+        const { featureLibrary } = await import('@/lib/features/featureLibraryParser')
+        const pricing = featureLibrary.calculatePricing(selectedFeatureIds, packageTier)
+        
+        // Update feature selection with new pricing
+        const basePrice = packageTier === 'Starter' ? 2500 : 
+                         packageTier === 'Professional' ? 4500 : 6000
+        
         get().selectFeatures(selectedFeatureIds)
+        
+        // Update feature selection with pricing
+        set({
+          featureSelection: {
+            package: packageTier.toLowerCase() as 'starter' | 'professional' | 'custom',
+            selectedFeatures: selectedFeatureIds,
+            totalPrice: basePrice + pricing.total,
+            monthlyHosting: packageTier === 'Starter' ? 75 : 
+                          packageTier === 'Professional' ? 150 : 300,
+            featuresPresented: true,
+            presentedAt: new Date(),
+          },
+          packageTier,
+        })
         
         // Add user message
         get().addMessage({

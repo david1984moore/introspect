@@ -15,6 +15,17 @@
 /debug    → Open Chrome for testing
 ```
 
+## ⚠️ CRITICAL WORKFLOW: Phase Completion
+**When a phase is completed, STATUS.md MUST be automatically updated:**
+
+1. Update "Current Task" header
+2. Add phase to "Queued Tasks" as ✅ COMPLETE
+3. Create new Session Log entry with all completed items
+4. Add/update Phase Progress section
+5. Update Quick Stats if metrics changed
+
+See `docs/reference/PHASE_COMPLETION_WORKFLOW.md` for complete checklist.
+
 ## 📁 Files & Limits
 
 | File | Max Lines | Auto-Archive |

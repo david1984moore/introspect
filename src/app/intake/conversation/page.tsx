@@ -13,6 +13,7 @@ import { FeatureSelectionScreen } from '@/components/FeatureSelectionScreen'
 import { StartOverModal } from '@/components/StartOverModal'
 import { ContextSummary } from '@/components/conversation/ContextSummary'
 import { QuestionDisplay } from '@/components/conversation/QuestionDisplay'
+import { FeatureChipGrid } from '@/components/conversation/FeatureChipGrid'
 import { useContextDisplay } from '@/hooks/useContextDisplay'
 import type { QuestionOption, ConversationIntelligence } from '@/types/conversation'
 
@@ -34,9 +35,11 @@ export default function ConversationPage() {
     currentCategory,
     intelligence,
     featureSelection,
+    packageTier,
     orchestrateNext,
     submitAnswer,
     submitFeatureSelection,
+    calculatePackageTier,
   } = useConversationStore()
 
   const [selectedOption, setSelectedOption] = useState<string>('')
@@ -45,8 +48,13 @@ export default function ConversationPage() {
   const [hasInitialized, setHasInitialized] = useState(false)
   const [showStartOverModal, setShowStartOverModal] = useState(false)
 
-  // Get context display configuration
-  const { showContext, compact } = useContextDisplay(questionCount)
+  // Determine if we're in feature selection mode (Questions 10-12 or when showingFeatureSelection is true)
+  const isFeatureSelectionMode = 
+    showingFeatureSelection || 
+    (currentQuestion?.inputType === 'chips' && questionCount >= 10 && questionCount <= 12)
+  
+  // Get package tier for feature pricing
+  const currentPackageTier = packageTier || calculatePackageTier()
 
   // Map store data to ConversationIntelligence format
   const conversationIntelligence: ConversationIntelligence = useMemo(() => {
@@ -239,8 +247,18 @@ export default function ConversationPage() {
           </motion.div>
         )}
 
-        {/* Feature Selection Screen */}
-        {showingFeatureSelection && featureRecommendations && packageRecommendation && (
+        {/* Feature Selection Screen - Phase 6 FeatureChipGrid */}
+        {isFeatureSelectionMode && (
+          <FeatureChipGrid
+            intelligence={conversationIntelligence}
+            packageTier={currentPackageTier}
+            onSubmit={submitFeatureSelection}
+            isSubmitting={isTyping}
+          />
+        )}
+
+        {/* Legacy Feature Selection Screen (for backward compatibility) */}
+        {showingFeatureSelection && featureRecommendations && packageRecommendation && !isFeatureSelectionMode && (
           <FeatureSelectionScreen
             packageRecommendation={packageRecommendation}
             features={featureRecommendations}
@@ -252,7 +270,7 @@ export default function ConversationPage() {
         {/* Question Display - Use QuestionDisplay component for radio, text, and textarea */}
         {currentQuestion && 
          !isTyping && 
-         !showingFeatureSelection && 
+         !isFeatureSelectionMode && 
          (currentQuestion.inputType === 'radio' || 
           currentQuestion.inputType === 'text' || 
           currentQuestion.inputType === 'textarea') && (
@@ -274,7 +292,7 @@ export default function ConversationPage() {
         {/* Checkbox Options (Multi-select) - Keep inline for now */}
         {currentQuestion && 
          !isTyping && 
-         !showingFeatureSelection && 
+         !isFeatureSelectionMode && 
          currentQuestion.inputType === 'checkbox' && 
          currentQuestion.options && (
           <motion.div
