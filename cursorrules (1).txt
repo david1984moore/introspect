@@ -222,9 +222,12 @@ ls -lt archives/
 ### `/next` - Task Execution
 ```bash
 # 1. Read line 1 of STATUS.md (current task)
-# 2. Implement directly (no explanations)
-# 3. Move to next queued task
-# 4. Update STATUS.md line 1
+# 2. Display the task to user with clear description
+# 3. ASK USER: "Proceed with implementing [task name]? (yes/no)"
+# 4. WAIT for user confirmation before proceeding
+# 5. If confirmed: Implement directly (no explanations)
+# 6. Move to next queued task
+# 7. Update STATUS.md line 1
 ```
 
 ### `/dev` - Development Server
@@ -284,12 +287,18 @@ ls -lt archives/
 
 ## ðŸŽ¯ RESPONSE PATTERNS
 
-### Pattern 1: Direct Execution
+### Pattern 1: Confirmation Before Execution
 ```
 User: /next
+AI: Next task from STATUS.md:
+    "Implement user authentication module"
+    
+    Proceed with implementing user authentication? (yes/no)
+
+User: yes
 AI: Implementing user authentication...
 [actual code implementation]
-âœ“ Authentication module added to src/auth/
+âœ" Authentication module added to src/auth/
 ```
 
 ### Pattern 2: Archive Detection
@@ -368,9 +377,10 @@ Track in STATUS.md:
 
 1. **ALWAYS check line count during `/init` and `/save`**
 2. **NEVER let STATUS.md exceed 500 lines without archiving**
-3. **EXECUTE commands directly - don't suggest them**
+3. **EXECUTE commands directly - don't suggest them** (EXCEPT `/next` - always ask for confirmation first)
 4. **MAINTAIN state between commands - don't reload context**
 5. **PRESERVE session continuity through archives**
+6. **CRITICAL: `/next` command MUST ask for user confirmation before implementing**
 
 ---
 

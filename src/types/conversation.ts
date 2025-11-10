@@ -74,6 +74,20 @@ export interface QuestionOption {
   value: string
   label: string
   allowText?: boolean // For "Something else" option
+  description?: string // Optional 1-line explanation (Phase 5)
+  recommended?: boolean // Visual indicator for Claude's recommendation (Phase 5)
+}
+
+// Alias for Phase 5 compatibility
+export type Option = QuestionOption
+
+// Question Validation (Phase 5)
+export interface QuestionValidation {
+  required: boolean
+  minLength?: number
+  maxLength?: number
+  pattern?: string // Regex pattern for validation
+  errorMessage?: string
 }
 
 // Question Structure (V3.2)
@@ -85,6 +99,8 @@ export interface Question {
   category: string
   scope_section?: string
   scope_requirement?: string
+  placeholder?: string // For text input questions (Phase 5)
+  validation?: QuestionValidation // Phase 5
 }
 
 // Claude Response (V3.2 - SCOPE.md-driven)
@@ -135,5 +151,61 @@ export interface CategoryCompleteness {
   designDirection: number
   postLaunchSupport: number
   projectParameters: number
+}
+
+// Phase 4: Context Summary Types
+export interface ConversationIntelligence {
+  // Foundation
+  userName: string
+  userEmail: string
+  userPhone?: string
+  companyName?: string
+  websiteType: string
+  industry?: string
+  
+  // Business Context
+  targetAudience?: string
+  primaryGoal?: string
+  problemBeingSolved?: string
+  successMetrics?: string[]
+  valueProposition?: string
+  
+  // Technical Requirements
+  needsUserAccounts?: boolean
+  authenticationMethod?: string
+  needsCMS?: boolean
+  cmsUpdateFrequency?: string
+  needsSearch?: boolean
+  
+  // Features
+  selectedFeatures?: string[]
+  featurePricing?: Record<string, number>
+  
+  // Design
+  designStyle?: string
+  existingBrandAssets?: string[]
+  
+  // Timeline & Budget
+  desiredTimeline?: string
+  budgetRange?: string
+  priority?: string
+  
+  // Content
+  contentProvider?: string
+  contentReadiness?: string
+  
+  // Integrations
+  emailService?: string
+  analyticsProvider?: string
+  paymentProcessor?: string
+  
+  // Additional context
+  [key: string]: any
+}
+
+export interface ContextItem {
+  label: string
+  value: string
+  category?: 'foundation' | 'business' | 'technical' | 'features' | 'design' | 'timeline'
 }
 
