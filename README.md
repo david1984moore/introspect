@@ -10,16 +10,17 @@
 
 ## 🎯 What It Does
 
-Introspect guides clients through an intelligent conversation to gather all information needed for a complete project specification. It uses Claude AI (Sonnet 4.5) to orchestrate the conversation, asking targeted questions and tracking progress across 14 SCOPE.md sections.
+Introspect guides clients through an intelligent conversation to gather all information needed for a complete project specification. It uses Claude AI (Haiku 3.5) to orchestrate the conversation, asking targeted questions and tracking progress across 14 SCOPE.md sections.
 
 **Key Features:**
 - Progressive disclosure foundation form (Q1-Q4)
-- AI-driven conversation orchestration
+- AI-driven conversation orchestration with SCOPE.md-driven sufficiency evaluation
 - Multiple choice question system with "Something else" fallback
 - Feature selection chip interface with package recommendations
 - Real-time progress tracking (14 SCOPE.md sections)
 - Unified progress bar (never decreases)
-- Session persistence with encryption
+- Session persistence with client-side encryption
+- Start Over functionality with confirmation modal
 
 ---
 
@@ -28,24 +29,26 @@ Introspect guides clients through an intelligent conversation to gather all info
 ### Phase 1: Foundation ✅ Complete
 - Next.js 15.5.6 with TypeScript
 - Design system (Perfect Fourth typography, 8-point grid, OKLCH colors)
-- Foundation form with progressive disclosure
-- Core UI components (Button, Input, RadioGroup, Checkbox, Dialog, etc.)
+- Foundation form with progressive disclosure (4 questions)
+- Core UI components (Button, Input, RadioGroup, Checkbox, Dialog, Label, Textarea)
 
 ### Phase 2: State & Security ✅ Complete
-- Zustand store with persistence and encryption
-- Business model classification
+- Zustand store with persistence and client-side encryption
+- Business model classification state management
 - Feature selection management with conflict detection
 - Security utilities (encryption, rate limiting, input sanitization)
-- Session management and recovery
+- Session management with recovery capabilities
+- Cloud sync API route foundation (returns mock data - Supabase not configured)
 
 ### Phase 3: Claude Integration 🚧 In Progress
 - ✅ SCOPE.md-driven orchestration (V3.2)
-- ✅ Claude API integration
-- ✅ Conversation UI with question display
-- ✅ Multiple choice question rendering
-- ✅ Feature Selection Chip Interface
-- ✅ Package recommendation display
-- ✅ Progress tracking system
+- ✅ Claude API integration (Haiku 3.5 for cost optimization)
+- ✅ Conversation UI with question display and typing indicators
+- ✅ Multiple choice question rendering (radio and checkbox)
+- ✅ Feature Selection Chip Interface with visual selection
+- ✅ Package recommendation display with pricing
+- ✅ Progress tracking system (14-section based)
+- ✅ Start Over functionality with confirmation modal
 - ⏳ SCOPE.md document generation (next)
 - ⏳ Testing and validation (next)
 
@@ -63,10 +66,17 @@ introspect-v3/
 │   │   │   └── conversation/
 │   │   │       └── page.tsx           # AI conversation interface
 │   │   └── api/
-│   │       ├── claude/orchestrate/    # Claude orchestration API
-│   │       └── sessions/sync/         # Session sync API
+│   │       ├── claude/orchestrate/     # Claude orchestration API
+│   │       └── sessions/sync/          # Session sync API (mock)
 │   ├── components/
-│   │   ├── ui/                         # Base UI components
+│   │   ├── ui/                         # Base UI components (7)
+│   │   │   ├── button.tsx
+│   │   │   ├── checkbox.tsx
+│   │   │   ├── dialog.tsx
+│   │   │   ├── input.tsx
+│   │   │   ├── label.tsx
+│   │   │   ├── radio-group.tsx
+│   │   │   └── textarea.tsx
 │   │   ├── FeatureChip.tsx            # Feature selection chip
 │   │   ├── FeatureSelectionScreen.tsx # Feature selection interface
 │   │   └── StartOverModal.tsx         # Reset confirmation
@@ -77,7 +87,7 @@ introspect-v3/
 │       └── security/                   # Encryption, rate limiting
 ├── docs/
 │   ├── reference/                     # Workflow documentation
-│   ├── phases/                         # Phase documentation
+│   ├── phases/                         # Phase documentation (10 files)
 │   └── APPLICREATIONS_FEATURE_LIBRARY_V1_1_COMPLETE.md
 ├── STATUS.md                           # Current task tracking
 ├── SCOPE.md                            # Project boundaries
@@ -91,12 +101,17 @@ introspect-v3/
 ### Prerequisites
 - Node.js 20+
 - npm or yarn
+- Anthropic API key (set `ANTHROPIC_API_KEY` in `.env.local`)
 
 ### Installation
 
 ```bash
 # Install dependencies
 npm install
+
+# Set up environment variables
+# Create .env.local with:
+# ANTHROPIC_API_KEY=your_api_key_here
 
 # Start development server
 npm run dev
@@ -118,9 +133,9 @@ The app will be available at `http://localhost:3000`
 - **Framework:** Next.js 15.5.6 (App Router)
 - **Language:** TypeScript
 - **Styling:** Tailwind CSS with custom design system
-- **State:** Zustand with persistence
-- **AI:** Anthropic Claude Sonnet 4.5
-- **Database:** Supabase (configured)
+- **State:** Zustand with persistence and client-side encryption
+- **AI:** Anthropic Claude Haiku 3.5 (`claude-3-5-haiku-20241022`) - cost-optimized model
+- **Database:** Supabase package installed but **not configured** (returns mock session data)
 
 **Design Principles:**
 - Single-track architecture (one conversation path, AI adapts)
@@ -129,14 +144,51 @@ The app will be available at `http://localhost:3000`
 - 3-second rule (all interactions <3s or show progress)
 - Jobs/Ives design (70% whitespace, systematic spacing)
 
+**Security:**
+- Client-side encryption for localStorage (XOR-based sync, AES-GCM async available)
+- Input sanitization with DOMPurify
+- Rate limiting utilities (foundation in place)
+- Prompt injection detection
+
+---
+
+## 📊 Implementation Details
+
+**Components:** 10 total
+- 7 base UI components (Button, Checkbox, Dialog, Input, Label, RadioGroup, Textarea)
+- 3 custom components (FeatureChip, FeatureSelectionScreen, StartOverModal)
+
+**Pages:** 3
+- Landing page (`/`)
+- Foundation form (`/intake`)
+- Conversation interface (`/intake/conversation`)
+
+**API Routes:** 2
+- `/api/claude/orchestrate` - Claude conversation orchestration
+- `/api/sessions/sync` - Session sync (returns mock data - Supabase not configured)
+
+**State Management:**
+- Zustand store with persistence middleware
+- Client-side encryption for sensitive data
+- SCOPE.md section-based progress tracking (14 sections)
+- Feature selection and conflict detection
+- Business model classification
+
+**Claude Integration:**
+- Model: `claude-3-5-haiku-20241022` (Haiku 3.5)
+- V3.2 system prompt with SCOPE.md-driven sufficiency evaluation
+- Maximum 1 question per sub-topic
+- Plain English questions (10-12 words max)
+- Multiple choice standard (radio/checkbox based on question type)
+
 ---
 
 ## 📚 Documentation
 
 - `SCOPE.md` - Core architectural principles
 - `STATUS.md` - Current task tracking and progress
-- `docs/phases/` - Detailed phase documentation
-- `docs/reference/` - Workflow documentation (ALIASES.md, USER_GUIDE.md, QUICK_REF.md)
+- `docs/phases/` - Detailed phase documentation (10 phase files)
+- `docs/reference/` - Workflow documentation (ALIASES.md, USER_GUIDE.md, QUICK_REF.md, ARCHIVE_SYSTEM.md)
 - `docs/APPLICREATIONS_FEATURE_LIBRARY_V1_1_COMPLETE.md` - Feature catalog (200+ features)
 
 ---
@@ -145,17 +197,17 @@ The app will be available at `http://localhost:3000`
 
 **Current Focus:** SCOPE.md document generation and testing
 
-**Key Components:**
-- 9 UI components (base + conversation + feature selection)
-- 3 pages (Landing, Foundation Form, Conversation)
-- 2 API routes (Claude orchestration, Session sync)
-- Unified progress tracking (14-section based)
-
 **Code Quality:**
 - TypeScript strict mode
 - Zero type errors
 - Zero linter errors
 - Comprehensive type definitions
+
+**Known Limitations:**
+- Supabase integration not configured (session sync returns mock data)
+- SCOPE.md generation not yet implemented
+- PDF generation not yet implemented
+- Email delivery not yet implemented
 
 ---
 
@@ -163,9 +215,10 @@ The app will be available at `http://localhost:3000`
 
 1. **SCOPE.md Generation** - Generate complete SCOPE.md document from collected data
 2. **Testing & Validation** - Comprehensive testing of conversation flow
-3. **PDF Generation** - Client-facing PDF document creation
-4. **Email Delivery** - Automated email delivery system
+3. **Supabase Integration** - Configure database for session persistence
+4. **PDF Generation** - Client-facing PDF document creation
+5. **Email Delivery** - Automated email delivery system
 
 ---
 
-**Built with:** Next.js, TypeScript, Tailwind CSS, Zustand, Anthropic Claude API
+**Built with:** Next.js, TypeScript, Tailwind CSS, Zustand, Anthropic Claude API (Haiku 3.5)

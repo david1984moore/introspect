@@ -58,7 +58,7 @@
 **Focus:** Phase 3 Implementation - Claude Orchestration V3.2
 **Completed:**
 - ✅ Updated types for SCOPE.md-driven orchestration (14 sections, sufficiency evaluation)
-- ✅ Created Claude orchestration API route with V3.2 system prompt (Claude Sonnet 4.5)
+- ✅ Created Claude orchestration API route with V3.2 system prompt (Claude Haiku 3.5)
 - ✅ Built conversation UI with question display and option selection
 - ✅ Added SCOPE.md section progress tracking to store
 - ✅ Implemented multiple choice question rendering with options
@@ -149,12 +149,12 @@
 
 ## Quick Stats
 
-- **Components:** 9 UI components (5 base + Conversation UI + FeatureChip + FeatureSelectionScreen + Dialog + StartOverModal)
+- **Components:** 10 UI components (7 base + FeatureChip + FeatureSelectionScreen + StartOverModal)
 - **Pages:** 3 (Landing, Foundation Form, Conversation)
 - **API Routes:** 2 (Session sync, Claude orchestrate)
 - **Store:** Enhanced Zustand with unified section-based progress tracking
 - **Security:** Encryption, sanitization, rate limiting, prompt injection detection
-- **Claude Integration:** V3.2 SCOPE.md-driven orchestration (Claude Sonnet 4.5)
+- **Claude Integration:** V3.2 SCOPE.md-driven orchestration (Claude Haiku 3.5)
 - **Progress System:** Unified section-based (14 sections), never decreases
 - **Dependencies:** All installed (including @anthropic-ai/sdk)
 - **Type Errors:** 0
