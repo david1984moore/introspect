@@ -13,9 +13,16 @@ import type {
   FeatureRecommendation,
   PackageRecommendation,
   ValidationLoop,
+  ValidationPrompt,
+  ValidationResponse,
+  ValidationOutcome,
 } from '@/types'
 import type { BusinessModel } from '@/types/business-models'
 import type { ScopeProgress, ClaudeResponse, Question } from '@/types/conversation'
+import { progressCalculator, convertToConversationIntelligence } from '@/lib/utils/progressCalculator'
+import type { ScopeDocument, ClientSummary } from '@/types/scope'
+import type { ValidationResult } from '@/lib/scope/documentValidator'
+import type { EmailDelivery } from '@/types/email'
 
 interface ConversationState {
   // Session Management
@@ -70,6 +77,13 @@ interface ConversationState {
   showingFeatureSelection: boolean
   packageTier: 'Starter' | 'Professional' | 'Custom' // Phase 6: Package tier for feature pricing
   
+  // Phase 8: Validation & Confirmation
+  currentValidation: ValidationPrompt | null
+  validationHistory: ValidationOutcome[]
+  
+  // Error Handling
+  orchestrationError: string | null
+  
   // Security & Monitoring
   lastActivity: Date
   ipAddress: string | null
@@ -111,6 +125,38 @@ interface ConversationState {
   updateScopeProgress: (progress: Partial<ScopeProgress>) => void
   submitFeatureSelection: (selectedFeatureIds: string[]) => Promise<void>
   calculatePackageTier: () => 'Starter' | 'Professional' | 'Custom' // Phase 6: Calculate package tier
+  
+  // Phase 8: Validation Actions
+  submitValidation: (response: ValidationResponse) => Promise<void>
+  addValidationOutcome: (outcome: ValidationOutcome) => void
+  continueOrchestration: (data: { action: string; [key: string]: any }) => Promise<void>
+  
+  // Phase 7: Progress Tracking
+  updateProgress: () => void
+  
+  // Phase 9: SCOPE.md Generation
+  generatedScope: ScopeDocument | null
+  clientSummary: ClientSummary | null
+  scopeValidation: ValidationResult | null
+  isGeneratingScope: boolean
+  scopeGenerationError: string | null
+  
+  generateScopeDocument: () => Promise<void>
+  downloadScopeMarkdown: () => void
+  downloadClientPDF: () => Promise<void>
+  
+  // Phase 10: Email Delivery & Completion
+  emailDeliveryStatus: {
+    client: 'pending' | 'sent' | 'failed'
+    david: 'pending' | 'sent' | 'failed'
+  }
+  emailDeliveries: EmailDelivery[]
+  isCompletingConversation: boolean
+  completionError: string | null
+  isComplete: boolean
+  
+  completeConversation: () => Promise<void>
+  retryEmailDelivery: (recipientType: 'client' | 'david') => Promise<void>
 }
 
 // Enhanced input validation with prompt injection detection
@@ -182,6 +228,7 @@ export const useConversationStore = create<ConversationState>()(
       validationCount: 0,
       completionPercentage: 0,
       currentCategory: 'foundation',
+      orchestrationError: null,
       categoryProgress: {
         foundation: 100, // Completed in static form
         businessContext: 0,
@@ -214,16 +261,37 @@ export const useConversationStore = create<ConversationState>()(
         overallCompleteness: 0,
         sectionsComplete: 0,
         sectionsInProgress: 0,
-        sectionsNotStarted: 14,
+        sectionsRemaining: 14,
+        currentSection: null,
+        estimatedQuestionsRemaining: 0,
       },
       currentQuestion: null,
       featureRecommendations: null,
       packageRecommendation: null,
       showingFeatureSelection: false,
       packageTier: 'Professional', // Default, calculated dynamically
+      currentValidation: null, // Phase 8: Current validation prompt
+      validationHistory: [], // Phase 8: Validation outcomes history
       lastActivity: new Date(),
       ipAddress: null,
       suspiciousActivityCount: 0,
+      
+      // Phase 9: SCOPE.md Generation state
+      generatedScope: null,
+      clientSummary: null,
+      scopeValidation: null,
+      isGeneratingScope: false,
+      scopeGenerationError: null,
+      
+      // Phase 10: Email Delivery & Completion state
+      emailDeliveryStatus: {
+        client: 'pending',
+        david: 'pending'
+      },
+      emailDeliveries: [],
+      isCompletingConversation: false,
+      completionError: null,
+      isComplete: false,
       
       // Helper function to calculate completion percentage based on completed sections
       calculateCompletionFromSections: () => {
@@ -244,34 +312,50 @@ export const useConversationStore = create<ConversationState>()(
           websiteType: validateInput(data.websiteType),
         }
         
-        // Initialize SCOPE.md sections 2 and 3 as complete (foundation data)
+        // Only mark sections 2 and 3 as complete when ALL foundation data is present
+        // This ensures we don't mark sections complete prematurely during the multi-step form
+        const hasAllFoundationData = sanitized.userName && 
+                                     sanitized.userEmail && 
+                                     sanitized.websiteType
+        
         const state = get()
-        const updatedProgress = {
-          ...state.scopeProgress,
-          sections: {
-            ...state.scopeProgress.sections,
-            section2_project_classification: 'complete',
-            section3_client_information: 'complete',
-          },
+        let updatedProgress = state.scopeProgress
+        
+        if (hasAllFoundationData) {
+          // Initialize SCOPE.md sections 2 and 3 as complete (foundation data)
+          updatedProgress = {
+            ...state.scopeProgress,
+            sections: {
+              ...state.scopeProgress.sections,
+              section2_project_classification: 'complete',
+              section3_client_information: 'complete',
+            },
+          }
+          
+          // Calculate completed sections
+          const completedSections = Object.values(updatedProgress.sections).filter(
+            (status) => status === 'complete'
+          ).length
+          
+          set({
+            ...sanitized,
+            currentCategory: 'business_context',
+            lastActivity: new Date(),
+            scopeProgress: {
+              ...updatedProgress,
+              sectionsComplete: completedSections,
+              sectionsRemaining: 14 - completedSections,
+              overallCompleteness: Math.round((completedSections / 14) * 100),
+            },
+            completionPercentage: Math.round((completedSections / 14) * 100),
+          })
+        } else {
+          // Partial data - don't mark sections complete yet
+          set({
+            ...sanitized,
+            lastActivity: new Date(),
+          })
         }
-        
-        // Calculate completed sections
-        const completedSections = Object.values(updatedProgress.sections).filter(
-          (status) => status === 'complete'
-        ).length
-        
-        set({
-          ...sanitized,
-          currentCategory: 'business_context',
-          lastActivity: new Date(),
-          scopeProgress: {
-            ...updatedProgress,
-            sectionsComplete: completedSections,
-            sectionsNotStarted: 14 - completedSections,
-            overallCompleteness: Math.round((completedSections / 14) * 100),
-          },
-          completionPercentage: Math.round((completedSections / 14) * 100),
-        })
         
         // Trigger cloud sync
         get().syncToCloud()
@@ -608,13 +692,15 @@ export const useConversationStore = create<ConversationState>()(
             overallCompleteness: 0,
             sectionsComplete: 0,
             sectionsInProgress: 0,
-            sectionsNotStarted: 14,
+            sectionsRemaining: 14,
           },
           currentQuestion: null,
           featureRecommendations: null,
           packageRecommendation: null,
           showingFeatureSelection: false,
           packageTier: 'Professional',
+          currentValidation: null, // Phase 8: Reset validation
+          validationHistory: [], // Phase 8: Reset validation history
           lastActivity: new Date(),
           ipAddress: null,
           suspiciousActivityCount: 0,
@@ -630,7 +716,7 @@ export const useConversationStore = create<ConversationState>()(
           return null
         }
         
-        set({ isTyping: true })
+        set({ isTyping: true, orchestrationError: null })
         
         try {
           const response = await fetch('/api/claude/orchestrate', {
@@ -749,7 +835,7 @@ export const useConversationStore = create<ConversationState>()(
                 overallCompleteness: finalCompletionPercentage,
                 sectionsComplete: completedSections,
                 sectionsInProgress: inProgressSections,
-                sectionsNotStarted: notStartedSections,
+                sectionsRemaining: notStartedSections,
               },
               completionPercentage: finalCompletionPercentage,
             })
@@ -792,10 +878,33 @@ export const useConversationStore = create<ConversationState>()(
               packageTier: pkg === 'starter' ? 'Starter' : pkg === 'professional' ? 'Professional' : 'Custom',
               currentQuestion: null,
               isTyping: false,
+              orchestrationError: null, // Clear any errors
             })
             
             // Present features in store
             get().presentFeatures(featureRecs, packageRec)
+          }
+          
+          // Phase 8: Handle validation action
+          else if (claudeResponse.action === 'validate_understanding' && claudeResponse.content.summary) {
+            // Create validation prompt from Claude's response
+            // Note: In production, Claude would return a structured ValidationPrompt
+            // For now, we'll create a basic one from the summary
+            const validationPrompt: ValidationPrompt = {
+              id: `validation_${Date.now()}`,
+              type: 'understanding',
+              category: claudeResponse.sufficiency_evaluation?.scope_section || 'general',
+              summary: claudeResponse.content.summary,
+              allowEdit: true
+            }
+            
+            set({
+              currentValidation: validationPrompt,
+              currentQuestion: null,
+              showingFeatureSelection: false,
+              isTyping: false,
+              orchestrationError: null, // Clear any errors
+            })
           }
           
           // Handle question action
@@ -814,7 +923,9 @@ export const useConversationStore = create<ConversationState>()(
               currentQuestion: question,
               currentQuestionId: question.id,
               showingFeatureSelection: false,
+              currentValidation: null, // Clear any validation when showing question
               isTyping: false,
+              orchestrationError: null, // Clear any errors
             })
           }
           
@@ -837,13 +948,46 @@ export const useConversationStore = create<ConversationState>()(
               },
               completionPercentage: 100,
               showingFeatureSelection: false,
+              orchestrationError: null, // Clear any errors
             })
+            
+            // Phase 10: Generate SCOPE.md and send emails
+            // This will be triggered by the UI when navigating to completion page
+            // to avoid blocking the response
           }
+          
+          // Handle unexpected action types
+          else {
+            console.error('Unexpected action from Claude:', claudeResponse.action)
+            const errorMessage = `Unexpected response type: ${claudeResponse.action}. Please try refreshing.`
+            set({
+              isTyping: false,
+              orchestrationError: errorMessage,
+              currentQuestion: null,
+            })
+            return null
+          }
+          
+          // Phase 7: After orchestration completes, re-evaluate progress to ensure
+          // sections can be promoted from 'in_progress' to 'complete' if calculator says so
+          // This ensures that even if Claude marks a section as 'in_progress', 
+          // the calculator can promote it to 'complete' if enough data has been gathered
+          get().updateProgress()
+          
+          // Clear any previous errors on success
+          set({ orchestrationError: null })
           
           return claudeResponse
         } catch (error) {
           console.error('Orchestration error:', error)
-          set({ isTyping: false })
+          const errorMessage = error instanceof Error 
+            ? error.message 
+            : 'Failed to load next question. Please try again.'
+          set({ 
+            isTyping: false,
+            orchestrationError: errorMessage,
+            currentQuestion: null,
+          })
           return null
         }
       },
@@ -874,6 +1018,9 @@ export const useConversationStore = create<ConversationState>()(
         
         // Trigger next orchestration
         await get().orchestrateNext()
+        
+        // Note: updateProgress() is now called at the end of orchestrateNext()
+        // to ensure sections are re-evaluated after Claude's response
       },
       
       updateScopeProgress: (progress) => {
@@ -981,6 +1128,414 @@ export const useConversationStore = create<ConversationState>()(
         
         // Continue orchestration
         await get().orchestrateNext()
+        
+        // Phase 7: Update progress after feature selection
+        get().updateProgress()
+      },
+      
+      // Phase 8: Submit validation response
+      submitValidation: async (response: ValidationResponse) => {
+        const state = get()
+        const currentValidation = state.currentValidation
+        if (!currentValidation) return
+        
+        // Helper function to apply corrections to summary
+        const applyCorrections = (
+          summary: string,
+          corrections: Record<string, string>
+        ): string => {
+          let correctedSummary = summary
+          
+          Object.entries(corrections).forEach(([field, value]) => {
+            // Simple replacement logic - in production, this would be more sophisticated
+            correctedSummary = correctedSummary.replace(
+              new RegExp(field, 'gi'),
+              value
+            )
+          })
+          
+          return correctedSummary
+        }
+        
+        // Create outcome record
+        const outcome: ValidationOutcome = {
+          validationId: response.validationId,
+          type: currentValidation.type,
+          category: currentValidation.category,
+          originalSummary: currentValidation.summary,
+          userResponse: response,
+          finalSummary: response.confirmed 
+            ? currentValidation.summary 
+            : applyCorrections(currentValidation.summary, response.corrections || {})
+        }
+        
+        // Store outcome
+        get().addValidationOutcome(outcome)
+        
+        // If corrections were made, update intelligence
+        if (response.corrections) {
+          set({
+            intelligence: {
+              ...state.intelligence,
+              ...response.corrections
+            }
+          })
+        }
+        
+        // Continue orchestration
+        await get().continueOrchestration({
+          action: 'validation_complete',
+          validationId: response.validationId,
+          confirmed: response.confirmed,
+          corrections: response.corrections
+        })
+        
+        // Clear current validation
+        set({ currentValidation: null })
+      },
+      
+      // Phase 8: Add validation outcome to history
+      addValidationOutcome: (outcome: ValidationOutcome) => {
+        set({
+          validationHistory: [...get().validationHistory, outcome]
+        })
+      },
+      
+      // Phase 8: Continue orchestration after validation
+      continueOrchestration: async (data: { action: string; [key: string]: any }) => {
+        const state = get()
+        
+        // Add user message about validation
+        get().addMessage({
+          role: 'user',
+          content: data.confirmed 
+            ? 'Validation confirmed' 
+            : 'Validation corrections provided',
+          metadata: {
+            validationId: data.validationId
+          }
+        })
+        
+        // Continue with next orchestration
+        await get().orchestrateNext()
+      },
+      
+      // Phase 7: Update progress based on current intelligence
+      updateProgress: () => {
+        const state = get()
+        
+        // Convert store state to ConversationIntelligence format
+        const conversationIntelligence = convertToConversationIntelligence(
+          state.intelligence,
+          {
+            userName: state.userName,
+            userEmail: state.userEmail,
+            userPhone: state.userPhone,
+            websiteType: state.websiteType,
+          },
+          state.featureSelection?.selectedFeatures
+        )
+        
+        // Calculate progress using the calculator
+        const calculatedProgress = progressCalculator.calculateProgress(conversationIntelligence)
+        
+        // Update scopeProgress, preserving any sections already marked complete
+        // (to avoid downgrading sections that Claude marked as complete)
+        const updatedSections = { ...state.scopeProgress.sections }
+        
+        // Only update sections if the new status is more complete than current
+        Object.entries(calculatedProgress.sections).forEach(([key, newStatus]) => {
+          const currentStatus = updatedSections[key as keyof typeof updatedSections]
+          
+          // Status hierarchy: not_started < in_progress < complete
+          if (currentStatus === 'not_started' && (newStatus === 'in_progress' || newStatus === 'complete')) {
+            updatedSections[key as keyof typeof updatedSections] = newStatus
+          } else if (currentStatus === 'in_progress' && newStatus === 'complete') {
+            updatedSections[key as keyof typeof updatedSections] = newStatus
+          }
+          // If currentStatus is already 'complete', keep it (don't downgrade)
+        })
+        
+        // Recalculate counts based on updated sections
+        const sectionsComplete = Object.values(updatedSections).filter(
+          status => status === 'complete'
+        ).length
+        const sectionsInProgress = Object.values(updatedSections).filter(
+          status => status === 'in_progress'
+        ).length
+        const sectionsRemaining = Object.values(updatedSections).filter(
+          status => status === 'not_started'
+        ).length
+        
+        const overallCompleteness = Math.round((sectionsComplete / 14) * 100)
+        
+        // CRITICAL: Progress should NEVER decrease
+        const finalCompletionPercentage = Math.max(state.completionPercentage, overallCompleteness)
+        
+        set({
+          scopeProgress: {
+            sections: updatedSections,
+            overallCompleteness: finalCompletionPercentage,
+            sectionsComplete,
+            sectionsInProgress,
+            sectionsRemaining,
+            currentSection: calculatedProgress.currentSection,
+            estimatedQuestionsRemaining: calculatedProgress.estimatedQuestionsRemaining,
+          },
+          completionPercentage: finalCompletionPercentage,
+        })
+      },
+      
+      // Phase 9: SCOPE.md Generation Actions
+      generateScopeDocument: async () => {
+        set({ 
+          isGeneratingScope: true, 
+          scopeGenerationError: null 
+        })
+        
+        try {
+          const state = get()
+          
+          // Convert store state to ConversationIntelligence
+          const conversationIntelligence = convertToConversationIntelligence(
+            state.intelligence,
+            {
+              userName: state.userName,
+              userEmail: state.userEmail,
+              userPhone: state.userPhone,
+              websiteType: state.websiteType,
+            },
+            state.featureSelection?.selectedFeatures
+          )
+          
+          // Import scope generator dynamically
+          const { scopeGenerator } = await import('@/lib/scope/scopeGenerator')
+          const { clientSummaryGenerator } = await import('@/lib/scope/clientSummaryGenerator')
+          const { documentValidator } = await import('@/lib/scope/documentValidator')
+          
+          const conversationId = state.sessionId || `conv_${Date.now()}`
+          
+          // Generate SCOPE.md
+          const scope = await scopeGenerator.generateScope(
+            conversationIntelligence,
+            conversationId
+          )
+          
+          // Validate document
+          const validation = documentValidator.validate(scope)
+          
+          if (!validation.isValid) {
+            const criticalErrors = validation.errors.filter(e => e.severity === 'critical')
+            if (criticalErrors.length > 0) {
+              throw new Error(
+                `Cannot generate SCOPE.md with critical errors: ${
+                  criticalErrors.map(e => e.message).join(', ')
+                }`
+              )
+            }
+          }
+          
+          // Generate client summary
+          const clientSummary = clientSummaryGenerator.generateClientSummary(
+            scope,
+            conversationIntelligence
+          )
+          
+          set({
+            generatedScope: scope,
+            clientSummary,
+            scopeValidation: validation,
+            isGeneratingScope: false
+          })
+          
+          // Save to backend
+          await fetch('/api/scope/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId,
+              scope,
+              clientSummary,
+              validation
+            })
+          })
+          
+        } catch (error) {
+          console.error('SCOPE.md generation failed:', error)
+          set({
+            scopeGenerationError: error instanceof Error ? error.message : 'Unknown error',
+            isGeneratingScope: false
+          })
+          throw error
+        }
+      },
+      
+      downloadScopeMarkdown: () => {
+        const scope = get().generatedScope
+        if (!scope) {
+          throw new Error('No SCOPE.md document generated')
+        }
+        
+        // Import markdown generator dynamically
+        import('@/lib/scope/markdownGenerator').then(({ markdownGenerator }) => {
+          const markdown = markdownGenerator.generateMarkdown(scope)
+          const blob = new Blob([markdown], { type: 'text/markdown' })
+          const url = URL.createObjectURL(blob)
+          
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `SCOPE_${scope.section1_executiveSummary.projectName.replace(/\s+/g, '_')}.md`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+        })
+      },
+      
+      downloadClientPDF: async () => {
+        const clientSummary = get().clientSummary
+        if (!clientSummary) {
+          throw new Error('No client summary generated')
+        }
+        
+        // Import client summary generator dynamically
+        const { clientSummaryGenerator } = await import('@/lib/scope/clientSummaryGenerator')
+        
+        // Generate HTML
+        const html = clientSummaryGenerator.generateHTML(clientSummary)
+        
+        // Call PDF generation API
+        const response = await fetch('/api/scope/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ html })
+        })
+        
+        if (!response.ok) {
+          throw new Error('PDF generation failed')
+        }
+        
+        // Download PDF
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${clientSummary.projectName.replace(/\s+/g, '_')}_Summary.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      },
+      
+      // Phase 10: Complete conversation and send emails
+      completeConversation: async () => {
+        set({ 
+          isCompletingConversation: true,
+          completionError: null
+        })
+        
+        try {
+          const state = get()
+          
+          // Ensure SCOPE.md is generated
+          if (!state.generatedScope || !state.clientSummary) {
+            await state.generateScopeDocument()
+          }
+          
+          const scope = get().generatedScope
+          const clientSummary = get().clientSummary
+          const conversationId = get().sessionId || `conv_${Date.now()}`
+          
+          if (!scope || !clientSummary) {
+            throw new Error('Failed to generate documents')
+          }
+          
+          // Send emails via API endpoint
+          const response = await fetch('/api/conversations/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId,
+              scope,
+              clientSummary
+            })
+          })
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+            throw new Error(errorData.error || 'Failed to complete conversation')
+          }
+          
+          const { emailDeliveries } = await response.json()
+          
+          // Update delivery status
+          set({
+            emailDeliveries: emailDeliveries || [],
+            emailDeliveryStatus: {
+              client: emailDeliveries?.find((e: EmailDelivery) => e.recipientType === 'client')?.status === 'sent' ? 'sent' : 'failed',
+              david: emailDeliveries?.find((e: EmailDelivery) => e.recipientType === 'david')?.status === 'sent' ? 'sent' : 'failed'
+            },
+            isCompletingConversation: false,
+            isComplete: true
+          })
+          
+        } catch (error) {
+          console.error('Conversation completion failed:', error)
+          set({
+            completionError: error instanceof Error ? error.message : 'Unknown error',
+            isCompletingConversation: false
+          })
+          throw error
+        }
+      },
+      
+      // Phase 10: Retry failed email delivery
+      retryEmailDelivery: async (recipientType: 'client' | 'david') => {
+        try {
+          const state = get()
+          const scope = state.generatedScope
+          const clientSummary = state.clientSummary
+          
+          if (!scope || !clientSummary) {
+            throw new Error('Documents not available for retry')
+          }
+          
+          const conversationId = state.sessionId || `conv_${Date.now()}`
+          
+          // Retry via API endpoint
+          const response = await fetch('/api/conversations/retry-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId,
+              recipientType,
+              scope,
+              clientSummary
+            })
+          })
+          
+          if (!response.ok) {
+            throw new Error('Email retry failed')
+          }
+          
+          const { delivery } = await response.json()
+          
+          set(state => ({
+            emailDeliveryStatus: {
+              ...state.emailDeliveryStatus,
+              [recipientType]: delivery.status === 'sent' ? 'sent' : 'failed'
+            },
+            emailDeliveries: [
+              ...state.emailDeliveries.filter(e => e.recipientType !== recipientType),
+              delivery
+            ]
+          }))
+          
+        } catch (error) {
+          console.error('Email retry failed:', error)
+          throw error
+        }
       },
     }),
     {

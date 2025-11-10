@@ -11,6 +11,9 @@ import { ChevronLeft, Building, User, Rocket, Handshake, Sparkles, RotateCcw } f
 import { z } from 'zod'
 import { useConversationStore } from '@/stores/conversationStore'
 import { StartOverModal } from '@/components/StartOverModal'
+import { ScopeProgressPanel } from '@/components/conversation/ScopeProgressPanel'
+import { MobileProgressHeader } from '@/components/conversation/MobileProgressHeader'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { FoundationData } from '@/types/conversation'
 
 // Validation schemas
@@ -34,7 +37,7 @@ const websiteTypes = [
 
 export default function FoundationForm() {
   const router = useRouter()
-  const { setFoundation, userName, userEmail, userPhone, websiteType, completionPercentage } = useConversationStore()
+  const { setFoundation, userName, userEmail, userPhone, websiteType, scopeProgress } = useConversationStore()
   
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<Partial<FoundationFormData>>({})
@@ -42,6 +45,10 @@ export default function FoundationForm() {
   const phoneInputRef = useRef<HTMLInputElement>(null)
   const initializedRef = useRef(false)
   const [showStartOverModal, setShowStartOverModal] = useState(false)
+  
+  // Responsive breakpoints
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
 
   // Initialize form data from store on mount (only once)
   useEffect(() => {
@@ -51,6 +58,32 @@ export default function FoundationForm() {
       // Check if websiteType is a custom "other" description
       const validTypes: Array<'business' | 'personal' | 'project' | 'nonprofit' | 'other'> = ['business', 'personal', 'project', 'nonprofit', 'other']
       const isCustomOther = websiteType && typeof websiteType === 'string' && !validTypes.includes(websiteType as 'business' | 'personal' | 'project' | 'nonprofit' | 'other')
+      
+      // Check if we have ALL foundation data (name, email, websiteType)
+      const hasAllFoundationData = userName && userEmail && websiteType
+      
+      // If we only have partial foundation data, reset progress sections to avoid showing incorrect completion
+      if (!hasAllFoundationData && scopeProgress) {
+        const currentState = useConversationStore.getState()
+        if (currentState.scopeProgress.sections.section2_project_classification === 'complete' ||
+            currentState.scopeProgress.sections.section3_client_information === 'complete') {
+          // Reset sections 2 and 3 if we don't have all foundation data
+          useConversationStore.setState({
+            scopeProgress: {
+              ...currentState.scopeProgress,
+              sections: {
+                ...currentState.scopeProgress.sections,
+                section2_project_classification: 'not_started',
+                section3_client_information: 'not_started',
+              },
+              sectionsComplete: Math.max(0, currentState.scopeProgress.sectionsComplete - 2),
+              sectionsRemaining: Math.min(14, currentState.scopeProgress.sectionsRemaining + 2),
+              overallCompleteness: Math.max(0, Math.round(((currentState.scopeProgress.sectionsComplete - 2) / 14) * 100)),
+            },
+            completionPercentage: Math.max(0, Math.round(((currentState.scopeProgress.sectionsComplete - 2) / 14) * 100)),
+          })
+        }
+      }
       
       // Only initialize if store has data
       if (userName || userEmail || userPhone || websiteType) {
@@ -97,27 +130,25 @@ export default function FoundationForm() {
     setErrors(newErrors)
     
     if (isValid) {
-      // Save current step data to store before moving forward
+      // Only save partial data to store, don't mark sections complete until all foundation data is done
+      // We'll update the store directly without calling setFoundation to avoid premature section completion
       if (currentStep === 1 && formData.userName) {
-        setFoundation({
-          userName: formData.userName,
-          userEmail: '',
-          userPhone: '',
-          websiteType: '',
-        })
+        // Just update userName in store without marking sections complete
+        useConversationStore.setState({ userName: formData.userName })
       } else if (currentStep === 2 && formData.userEmail) {
-        setFoundation({
-          userName: formData.userName || '',
-          userEmail: formData.userEmail,
-          userPhone: '',
-          websiteType: '',
+        // Update email without marking sections complete
+        const currentState = useConversationStore.getState()
+        useConversationStore.setState({ 
+          userName: formData.userName || currentState.userName,
+          userEmail: formData.userEmail 
         })
       } else if (currentStep === 3) {
-        setFoundation({
-          userName: formData.userName || '',
-          userEmail: formData.userEmail || '',
-          userPhone: formData.userPhone || '',
-          websiteType: '',
+        // Update phone without marking sections complete
+        const currentState = useConversationStore.getState()
+        useConversationStore.setState({ 
+          userName: formData.userName || currentState.userName,
+          userEmail: formData.userEmail || currentState.userEmail,
+          userPhone: formData.userPhone || '' 
         })
       }
       
@@ -283,24 +314,27 @@ export default function FoundationForm() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Mobile Progress Header */}
+      {isMobile && scopeProgress && (
+        <MobileProgressHeader
+          progress={scopeProgress}
+          questionNumber={0}
+        />
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-3xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-gray-900">
-                {userName ? `Welcome back, ${userName}` : 'Let\'s get started'}
+                {userName && currentStep > 1 ? `Welcome back, ${userName}` : 'Let\'s get started'}
               </h1>
               <p className="text-sm text-gray-600">
                 {websiteType ? `Building your ${websiteType} website` : 'Tell us about your project'}
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-sm font-medium text-gray-900">
-                  {completionPercentage}% Complete
-                </div>
-              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -312,24 +346,28 @@ export default function FoundationForm() {
               </Button>
             </div>
           </div>
-
-          {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <motion.div
-                className="bg-primary h-full rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${completionPercentage}%` }}
-                transition={{ duration: 0.3 }}
-              />
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Form Content */}
-      <div className="max-w-3xl mx-auto px-6 py-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+      {/* Main Content Area */}
+      <div className={`max-w-7xl mx-auto px-6 py-8 ${isDesktop ? 'grid grid-cols-12 gap-8' : ''}`}>
+        {/* Desktop Sidebar with Progress */}
+        {isDesktop && scopeProgress && (
+          <aside className="col-span-4">
+            <div className="sticky top-8 space-y-6">
+              <ScopeProgressPanel
+                progress={scopeProgress}
+                variant="compact"
+                collapsible
+                defaultExpanded={false}
+              />
+            </div>
+          </aside>
+        )}
+
+        {/* Form Content */}
+        <div className={isDesktop ? 'col-span-8' : 'max-w-3xl mx-auto'}>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <AnimatePresence mode="wait">
             {/* Step 1: Name */}
             {currentStep === 1 && (
@@ -569,6 +607,7 @@ export default function FoundationForm() {
             )}
           </AnimatePresence>
         </div>
+      </div>
       </div>
 
       {/* Start Over Modal */}

@@ -53,6 +53,29 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 
 **BEFORE ASKING ANY QUESTION:**
 
+0. **RELEVANCE CHECK - CRITICAL FIRST STEP**
+   "Does this question directly contribute to a SCOPE.md section?"
+   
+   Verify:
+   - Which SCOPE.md section does this question serve?
+   - Is this information explicitly required for that section?
+   - Will this answer change how SCOPE.md is written?
+   
+   **IF NO to any of these → DON'T ASK THE QUESTION**
+   
+   Examples of irrelevant questions to REJECT:
+   - ❌ "How long have you been running [business]?" → No SCOPE.md section needs this
+   - ❌ "When did you start your business?" → Historical info not in SCOPE.md
+   - ❌ "What's your business background?" → Not required for scope
+   - ❌ "How comfortable are your target businesses with technology?" → Not relevant to SCOPE.md requirements
+   - ❌ "How comfortable are your customers with using technology?" → Not relevant to SCOPE.md requirements
+   - ❌ "What is your target audience's technical sophistication level?" → Not relevant to SCOPE.md requirements
+   
+   Examples of relevant questions to ASK:
+   - ✅ "What service does your business provide?" → Section 4: Business Context
+   - ✅ "Who are your customers?" → Section 4: Business Context (target audience)
+   - ✅ "Do you have a logo?" → Section 5: Brand Assets & Identity
+
 1. **IDENTIFY CURRENT SCOPE.MD SECTION**
    "What SCOPE.md section am I gathering information for?"
    
@@ -67,6 +90,13 @@ The end goal is generating a complete SCOPE.md document with 14 required section
    "Do I have enough information to WRITE THIS SECTION?"
    
    List each requirement as satisfied (✓) or missing (?)
+   
+   **CRITICAL: Before marking something as missing, check the intelligence object:**
+   - If targetAudience exists in intelligence → Target audience is satisfied (✓)
+   - If primaryGoal exists in intelligence → Primary goal is satisfied (✓)
+   - If valueProposition or uniqueValue exists in intelligence → Value proposition is satisfied (✓)
+   - If services or servicesOffered exists in intelligence → Services information is satisfied (✓)
+   - **DO NOT ask about information that already exists in intelligence**
 
 4. **IMPLEMENTATION IMPACT TEST**
    "Would additional detail change HOW this section gets implemented?"
@@ -75,14 +105,19 @@ The end goal is generating a complete SCOPE.md document with 14 required section
    - ✅ Knowing if email OR social auth → Changes implementation (ASK)
    - ❌ Knowing specific OAuth providers → Implementation detail (SKIP)
 
-5. **CHECK DEPTH LIMIT**
-   "How many questions have I asked for THIS SCOPE.md section/sub-topic?"
+5. **CHECK DEPTH LIMIT - CRITICAL: MAXIMUM 1-2 QUESTIONS PER SUBSECTION**
+   "How many questions have I asked for THIS SCOPE.md section/subsection?"
    
    Rules:
-   - 0 questions in sub-topic: Can continue if information needed for SCOPE.md
-   - 1+ questions in sub-topic: Move to next section UNLESS critical gap exists
+   - **MAXIMUM 1 question per subsection** (e.g., target audience, primary goal, value proposition)
+   - **MAXIMUM 2 questions per SCOPE.md section** (e.g., Section 4: Business Context)
+   - After 1 question in a subsection, move to the next subsection UNLESS critical gap exists
+   - After 2 questions in a section, move to the next section UNLESS critical gap exists
+   - If targetAudience is already in intelligence, DO NOT ask about customers/audience again
+   - If primaryGoal is already in intelligence, DO NOT ask about goals again
+   - If valueProposition is already in intelligence, DO NOT ask about services/value again
    
-   **CRITICAL: Maximum 1 question per sub-topic. After 1 question, move to the next section or topic.**
+   **CRITICAL: Maximum 1 question per subsection. Maximum 2 questions per section. After reaching these limits, move to the next section/subsection.**
 
 6. **MAKE DECISION**
    
@@ -124,7 +159,7 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 
 **Use RADIO (inputType: "radio") when:**
 - The question asks for a single choice or category
-- Examples: "What does your business do?" (one primary thing)
+- Examples: "What service does your business provide?" (one primary thing)
 - Examples: "How many customers do you have?" (one range)
 - Examples: "What's your budget range?" (one range)
 - Examples: "What's your primary goal?" (one primary goal)
@@ -161,11 +196,46 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 - ❌ "What do you want visitors to be able to do?"
 
 **Example of what TO ask instead:**
-- ✅ "What's the main thing your website needs to do?"
+- ✅ "What's the main goal you want to achieve with your website?"
 - ✅ "How do you want people to contact you?"
 - ✅ "Do you need to sell products online?"
 
 The difference: Ask about GOALS and NEEDS, not FEATURES. Extract feature requirements from the answers, then recommend features later.
+
+---
+
+## CRITICAL: ONLY ASK QUESTIONS THAT DIRECTLY CONTRIBUTE TO SCOPE.MD
+
+**EVERY question MUST map to a specific SCOPE.md section requirement**
+
+**NEVER ask questions that don't contribute to SCOPE.md generation, such as:**
+- ❌ "How long have you been running [business name]?" (Business tenure/history - NOT in SCOPE.md requirements)
+- ❌ "When did you start your business?" (Historical information - NOT needed for scope)
+- ❌ "How many years of experience do you have?" (Irrelevant to website scope)
+- ❌ "What's your business background?" (Not required for SCOPE.md)
+- ❌ "How comfortable are your target businesses with technology?" (Not relevant to SCOPE.md requirements)
+- ❌ "How comfortable are your customers with using technology?" (Not relevant to SCOPE.md requirements)
+- ❌ "What is your target audience's technical sophistication level?" (Not relevant to SCOPE.md requirements)
+- ❌ Questions about business history, founding dates, or tenure
+- ❌ Questions about technology comfort level or technical sophistication of target audience
+
+**WHY:**
+- SCOPE.md focuses on CURRENT requirements, not historical context
+- Business tenure doesn't affect website features, design, or technical specifications
+- Irrelevant questions waste user time and reduce completion rates
+- Every question must serve completing one of the 14 SCOPE.md sections
+
+**BEFORE ASKING ANY QUESTION, VERIFY:**
+1. Which SCOPE.md section does this question serve?
+2. Is this information explicitly required for that section?
+3. Will this answer change how SCOPE.md is written?
+4. If the answer is "no" to any of these, DON'T ASK THE QUESTION
+
+**Example of irrelevant question:**
+- ❌ "How long have you been running Applicreations?" → This doesn't map to any SCOPE.md section requirement
+
+**Example of relevant question:**
+- ✅ "What service does your business provide?" → Maps to Section 4: Business Context (company overview)
 
 ---
 
@@ -183,7 +253,7 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
    - ❌ BAD: "How would you describe your typical client engagement complexity?"
    - ✅ GOOD: "What kinds of projects do you usually work on?"
    - ❌ BAD: "What is your target audience's technical sophistication level?"
-   - ✅ GOOD: "How comfortable are your customers with using technology?"
+   - ❌ BAD: "How comfortable are your customers with using technology?" → NOT RELEVANT - Do not ask about technology comfort level
 
 2. **KEEP QUESTIONS SHORT - MAXIMUM 10-12 WORDS**
    - Questions should be brief and direct
@@ -191,7 +261,7 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
    - ❌ BAD: "How do you typically work with clients on web development projects?"
    - ✅ GOOD: "How do you work with clients?"
    - ❌ BAD: "What are the primary business goals for your development agency in the next 12-24 months?"
-   - ✅ GOOD: "What does your business do right now?"
+   - ✅ GOOD: "What service does your business provide?"
 
 3. **BE WARM AND PROFESSIONAL - NOT EXPLANATORY**
    - Write as if you're having a friendly conversation with a colleague
@@ -244,11 +314,11 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
    - Ask about what IS, not what WILL BE or SHOULD BE
    - Questions should be answerable immediately without reflection
    - ❌ BAD: "What are the primary business goals for your development agency in the next 12-24 months?"
-   - ✅ GOOD: "What does your business do right now?"
+   - ✅ GOOD: "What service does your business provide?"
    - ❌ BAD: "What are your long-term growth objectives?"
    - ✅ GOOD: "How many customers do you have right now?"
    - ❌ BAD: "What are your strategic priorities?"
-   - ✅ GOOD: "What's the main thing your website needs to do?"
+   - ✅ GOOD: "What's the main goal you want to achieve with your website?"
 
 9. **MAKE OPTIONS CLEAR AND CONCRETE**
    - Options should be specific, tangible choices
@@ -260,7 +330,7 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
    - Ask ONE simple question, not multiple questions combined
    - Keep questions short and focused on a single topic
    - ❌ BAD: "What makes your development agency special? What do you do better than other web development companies?"
-   - ✅ GOOD: "What does your business do?"
+   - ✅ GOOD: "What service does your business provide?"
    - ❌ BAD: "Who are your customers and what problems do they have?"
    - ✅ GOOD: "Who are your customers?"
 
@@ -271,7 +341,7 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
    - ❌ BAD: "What makes your development agency special? What do you do better than other web development companies?"
    - ❌ BAD: "How are you different from your competitors?"
    - ❌ BAD: "What's your unique selling proposition?"
-   - ✅ GOOD: "What does your business do?"
+   - ✅ GOOD: "What service does your business provide?"
    - ✅ GOOD: "What services do you offer?"
 
 ### EXAMPLES OF GOOD VS BAD QUESTIONS:
@@ -303,11 +373,11 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
 
 **GOOD (Short, Simple, Warm, Easy to Answer):**
 - "How do you work with clients?"
-- "What does your business do?"
+- "What service does your business provide?"
 - "Who are your customers?"
 - "What services do you offer?"
 - "How many customers do you have?"
-- "What's the main thing your website needs to do?"
+- "What's the main goal you want to achieve with your website?"
 - "Who will update your website?"
 - "How do you get new customers?"
 
@@ -320,6 +390,91 @@ Remember: You're translating technical requirements into friendly questions. The
 - Be WARM and PROFESSIONAL - friendly but not casual
 - Keep questions SINGLE-FOCUSED - one question at a time
 - Never ask about competitive positioning or "what makes you special" - users come to Introspect to help them figure that out
+
+---
+
+## CRITICAL: WHEN ASKING FOR BRAND MATERIALS (Section 5: Brand Assets & Identity)
+
+**When gathering brand materials/logos/design assets:**
+
+Use this EXACT format:
+- **Question text:** "Do you have brand materials you want to share?"
+- **Input type:** "file_upload" (special type for file uploads)
+- **No options:** Do NOT provide checkbox or radio options - just show file upload interface
+- **Helper text:** Optional, can be something like "Upload logos, brand colors, design files, or any other materials you have"
+
+**Example JSON structure:**
+{
+  "question": {
+    "id": "brand_materials",
+    "text": "Do you have brand materials you want to share?",
+    "inputType": "file_upload",
+    "helperText": "Upload logos, brand colors, design files, or any other materials you have",
+    "category": "brand_assets",
+    "scope_section": "Section 5: Brand Assets & Identity",
+    "scope_requirement": "Existing brand assets"
+  }
+}
+
+**Extract file information from response:**
+- Store in intelligence as: hasBrandMaterials: true/false
+- File names and details will be included in the answer text
+- Users can skip this question if they don't have materials
+
+**DO NOT:**
+- ❌ Use checkbox options like "I have a logo", "I have brand colors", etc.
+- ❌ Use radio buttons
+- ❌ Ask "What brand materials do you have ready to use?" (too specific, implies options)
+
+**DO:**
+- ✅ Ask "Do you have brand materials you want to share?"
+- ✅ Use inputType: "file_upload"
+- ✅ Allow users to upload files or skip
+- ✅ Continue button should always be enabled (even with no files)
+
+---
+
+## CRITICAL: WHEN ASKING FOR WEBSITE REFERENCES (Section 9: Design Direction)
+
+**When gathering design references/inspiration websites:**
+
+Use this EXACT format:
+- **Question text:** "Can you provide examples of websites you admire?"
+- **Helper text:** "copy/paste website links below"
+- **Input type:** "textarea" (NOT checkbox or radio)
+- **No options:** Do NOT provide multiple choice options - users should paste URLs directly
+- **Placeholder:** Optional, but can be something like "https://example.com" or "Paste website URLs here, one per line"
+
+**Example JSON structure:**
+{
+  "question": {
+    "id": "design_references",
+    "text": "Can you provide examples of websites you admire?",
+    "inputType": "textarea",
+    "helperText": "copy/paste website links below",
+    "placeholder": "Paste website URLs here, one per line",
+    "category": "design",
+    "scope_section": "Section 9: Design Direction",
+    "scope_requirement": "Design references/inspiration"
+  }
+}
+
+**Extract URLs from response:**
+- Parse the user's textarea response to extract URLs
+- Store in intelligence as: designReferences: ["url1", "url2", ...] or inspirationReferences: ["url1", "url2", ...]
+- Users can paste multiple URLs separated by newlines, commas, or spaces
+
+**DO NOT:**
+- ❌ Use checkbox options like "Simple, clean design websites"
+- ❌ Use radio buttons
+- ❌ Ask "Can you share websites that match your brand's style?" (too specific)
+- ❌ Provide predefined categories - let users provide their own examples
+
+**DO:**
+- ✅ Ask "Can you provide examples of websites you admire?"
+- ✅ Use textarea input type
+- ✅ Include helperText: "copy/paste website links below"
+- ✅ Allow users to paste multiple URLs freely
 
 ---
 
@@ -361,8 +516,23 @@ You MUST respond with valid JSON matching this structure:
       "category": "business_context"
     }
   },
+  // Example with helperText for URL input:
+  // "content": {
+  //   "question": {
+  //     "id": "design_references",
+  //     "text": "Can you provide examples of websites you admire?",
+  //     "inputType": "textarea",
+  //     "helperText": "copy/paste website links below",
+  //     "placeholder": "Paste website URLs here, one per line",
+  //     "category": "design",
+  //     "scope_section": "Section 9: Design Direction"
+  //   }
+  // },
   "intelligence": {
     // Extracted data points from conversation
+    // CRITICAL: When user answers a business/company name question, extract it as:
+    // "businessName": "user's answer"
+    // This is essential for Section 3 (Client Information) and Section 4 (Business Context)
   },
   "progress": {
     "percentage": 45,
@@ -378,8 +548,16 @@ Remember:
 - NEVER ask questions whose answers don't affect SCOPE.md content
 - STOP when all 14 SCOPE.md sections can be written completely
 - Track progress by SCOPE.md sections, not arbitrary question counts
-- **CRITICAL: Maximum 1 question per sub-topic - after 1 question, move to the next section**
+- **CRITICAL: Maximum 1 question per subsection. Maximum 2 questions per section. After reaching these limits, move to the next section/subsection.**
+- **CRITICAL: Before asking any question, check if the information already exists in the intelligence object - DO NOT ask about information that's already been gathered**
+- **CRITICAL: If targetAudience exists in intelligence, DO NOT ask about customers/audience - mark it as satisfied (✓)**
+- **CRITICAL: If primaryGoal exists in intelligence, DO NOT ask about goals - mark it as satisfied (✓)**
+- **CRITICAL: If valueProposition or uniqueValue exists in intelligence, DO NOT ask about services/value - mark it as satisfied (✓)**
 - **CRITICAL: NEVER ask duplicate or similar questions - always check previously asked questions before generating a new one**
+- **CRITICAL: NEVER ask questions about topics already covered - check the "TOPICS ALREADY COVERED" list**
+- **CRITICAL: If services information is already in intelligence, DO NOT ask about services again**
+- **CRITICAL: If you've asked about services, DO NOT ask similar questions like "How do you help...", "What problems do you solve...", "What challenges...", or "What value do you provide..." - these are semantically the same question**
+- **CRITICAL: NEVER ask questions about business history, tenure, founding dates, or background - these don't contribute to SCOPE.md**
 - **CRITICAL: Keep questions SHORT (10-12 words maximum) - cut out unnecessary words**
 - **CRITICAL: Use SIMPLE WORDS - assume user knows nothing about web development, business, or technology**
 - **CRITICAL: Be DIRECT - don't explain concepts, just ask the question directly**
@@ -387,6 +565,7 @@ Remember:
 - **CRITICAL: Questions must focus on CURRENT state, not future goals - users should answer immediately without deep thinking**
 - **CRITICAL: ONE simple question at a time - no compound questions**
 - **CRITICAL: Never ask about competitive positioning or "what makes you special" - users come to Introspect to help them figure that out**
+- **CRITICAL: NEVER ask about technology comfort level or technical sophistication of target audience - this is NOT relevant to SCOPE.md requirements**
 `
 
 export async function POST(request: NextRequest) {
@@ -442,16 +621,132 @@ export async function POST(request: NextRequest) {
 
     // Extract all previously asked questions to prevent duplicates
     const askedQuestions: string[] = []
+    const askedQuestionTopics: Set<string> = new Set()
+    const questionsBySection: Record<string, number> = {} // Track questions per SCOPE.md section
+    const questionsBySubsection: Record<string, number> = {} // Track questions per subsection
+    
     conversation?.forEach((msg: any) => {
       if (msg.metadata?.questionText) {
-        askedQuestions.push(msg.metadata.questionText.toLowerCase().trim())
+        const questionText = msg.metadata.questionText.toLowerCase().trim()
+        askedQuestions.push(questionText)
+        
+        // Track which SCOPE.md section this question was for
+        const section = msg.metadata.questionCategory || msg.metadata.scopeSection || 'unknown'
+        questionsBySection[section] = (questionsBySection[section] || 0) + 1
+        
+        // Extract subsection from question category or scope section
+        const subsection = msg.metadata.scopeRequirement || section
+        questionsBySubsection[subsection] = (questionsBySubsection[subsection] || 0) + 1
+        
+        // Extract key topics from questions to detect semantic duplicates
+        // Check for common question patterns
+        if (questionText.includes('service') || questionText.includes('offer') || questionText.includes('provide') ||
+            questionText.includes('help') || questionText.includes('solve') || questionText.includes('challenge') ||
+            questionText.includes('problem') || questionText.includes('value') || questionText.includes('benefit')) {
+          askedQuestionTopics.add('services')
+        }
+        if (questionText.includes('customer') || questionText.includes('client') || questionText.includes('audience') ||
+            questionText.includes('who') && (questionText.includes('target') || questionText.includes('reach')) ||
+            questionText.includes('age range') || questionText.includes('typical customer')) {
+          askedQuestionTopics.add('customers')
+        }
+        if (questionText.includes('comfortable') && questionText.includes('technology') ||
+            questionText.includes('comfortable') && questionText.includes('tech') ||
+            questionText.includes('technical') && (questionText.includes('sophistication') || questionText.includes('level')) ||
+            questionText.includes('technology') && (questionText.includes('comfort') || questionText.includes('comfortable'))) {
+          askedQuestionTopics.add('technology_comfort')
+        }
+        if (questionText.includes('goal') || questionText.includes('objective') || questionText.includes('purpose') ||
+            questionText.includes('main thing') || questionText.includes('primary')) {
+          askedQuestionTopics.add('goals')
+        }
+        if (questionText.includes('logo') || questionText.includes('brand') || questionText.includes('design material') ||
+            questionText.includes('existing') && questionText.includes('design') ||
+            questionText.includes('brand material') || questionText.includes('share') && questionText.includes('brand') ||
+            questionText.includes('upload') && (questionText.includes('logo') || questionText.includes('brand'))) {
+          askedQuestionTopics.add('brand_assets')
+        }
+        if (questionText.includes('content') || questionText.includes('update') || questionText.includes('maintain') ||
+            questionText.includes('who will') && questionText.includes('update')) {
+          askedQuestionTopics.add('content')
+        }
+        if (questionText.includes('feature') || questionText.includes('functionality') || questionText.includes('need') ||
+            questionText.includes('want') && questionText.includes('website')) {
+          askedQuestionTopics.add('features')
+        }
       }
     })
     
     // Also include current question if it exists (hasn't been answered yet)
     if (currentQuestion?.text) {
-      askedQuestions.push(currentQuestion.text.toLowerCase().trim())
+      const questionText = currentQuestion.text.toLowerCase().trim()
+      askedQuestions.push(questionText)
+      
+      // Track current question's section
+      const section = currentQuestion.category || currentQuestion.scope_section || 'unknown'
+      questionsBySection[section] = (questionsBySection[section] || 0) + 1
+      
+      // Extract topics from current question too
+      if (questionText.includes('service') || questionText.includes('offer') || questionText.includes('provide') ||
+          questionText.includes('help') || questionText.includes('solve') || questionText.includes('challenge') ||
+          questionText.includes('problem') || questionText.includes('value') || questionText.includes('benefit')) {
+        askedQuestionTopics.add('services')
+      }
+      if (questionText.includes('customer') || questionText.includes('client') || questionText.includes('audience') ||
+          questionText.includes('who') && (questionText.includes('target') || questionText.includes('reach')) ||
+          questionText.includes('age range') || questionText.includes('typical customer')) {
+        askedQuestionTopics.add('customers')
+      }
+      if (questionText.includes('logo') || questionText.includes('brand') || questionText.includes('design material') ||
+          questionText.includes('brand material') || questionText.includes('share') && questionText.includes('brand') ||
+          questionText.includes('upload') && (questionText.includes('logo') || questionText.includes('brand'))) {
+        askedQuestionTopics.add('brand_assets')
+      }
+      if (questionText.includes('comfortable') && questionText.includes('technology') ||
+          questionText.includes('comfortable') && questionText.includes('tech') ||
+          questionText.includes('technical') && (questionText.includes('sophistication') || questionText.includes('level')) ||
+          questionText.includes('technology') && (questionText.includes('comfort') || questionText.includes('comfortable'))) {
+        askedQuestionTopics.add('technology_comfort')
+      }
     }
+    
+    // Check if services/value proposition information is already in intelligence
+    const hasServicesInfo = intelligence?.services || intelligence?.servicesOffered || 
+                           intelligence?.serviceTypes || intelligence?.businessServices ||
+                           intelligence?.valueProposition || intelligence?.howYouHelp ||
+                           intelligence?.problemsSolved || intelligence?.benefits ||
+                           (intelligence?.primaryService && intelligence.primaryService !== '')
+    
+    // Check if customer/audience information is already in intelligence
+    const hasCustomerInfo = intelligence?.targetAudience || intelligence?.customerType ||
+                           intelligence?.clientType || intelligence?.audience ||
+                           (intelligence?.targetAudience && intelligence.targetAudience !== '')
+    
+    // Check if brand materials/assets have already been provided
+    const hasBrandMaterials = intelligence?.hasBrandMaterials || intelligence?.hasLogo || 
+                             intelligence?.logo || intelligence?.brandMaterials ||
+                             (conversation && conversation.some((msg: any) => 
+                               msg.role === 'user' && 
+                               (msg.content.toLowerCase().includes('uploaded files') || 
+                                msg.content.toLowerCase().includes('logo') ||
+                                msg.metadata?.questionText?.toLowerCase().includes('brand material'))))
+    
+    // Count questions asked for Section 4 (Business Context)
+    const section4Questions = questionsBySection['business_context'] || questionsBySection['section4'] || 0
+    const targetAudienceQuestions = questionsBySubsection['target_audience'] || 
+                                    questionsBySubsection['audience'] || 0
+    
+    // Check if the last user message was answering a business name question
+    const lastUserMessage = conversation && conversation.length > 0 
+      ? conversation[conversation.length - 1]
+      : null
+    const isAnsweringBusinessName = lastUserMessage?.role === 'user' && 
+      (askedQuestions.some(q => q.toLowerCase().includes('name of your business') || 
+                                q.toLowerCase().includes('name of your project') ||
+                                q.toLowerCase().includes('name of your organization') ||
+                                q.toLowerCase().includes('name of your portfolio') ||
+                                q.toLowerCase().includes('what\'s the name') ||
+                                q.toLowerCase().includes('what is the name')))
 
     // Build foundational context
     const foundationContext = foundation ? `
@@ -468,12 +763,47 @@ Foundation Data:
     // If this is the first question (no conversation history), provide initial context
     let contextMessage = ''
     if (messages.length === 0) {
-      contextMessage = `
+      // Check if business name is already known
+      const hasBusinessName = intelligence?.businessName || intelligence?.companyName
+      
+      if (!hasBusinessName) {
+        // FIRST QUESTION: Ask for business name before any other business context questions
+        contextMessage = `
 ${foundationContext}
 
 This is the START of the conversation. The user has completed foundation questions.
 
 SCOPE.md sections 2 (Project Classification) and 3 (Client Information) are already complete from foundation data.
+
+**CRITICAL: The business/company name is missing and MUST be asked FIRST before any other business context questions.**
+
+Your task: Ask for the business/company name as the FIRST question. This is essential context that will be used throughout the conversation.
+
+Generate a question to ask for the business/company name. The question should:
+1. Reference the website type naturally (e.g., "What's the name of your business?" for business websites, "What's the name of your project?" for project websites)
+2. Use inputType: "text" (not multiple choice - names are unique)
+3. Be SHORT (10-12 words max)
+4. Use SIMPLE WORDS - assume user knows nothing
+5. Be DIRECT - don't explain, just ask
+6. Be written in plain English, warm and friendly
+
+Example questions:
+- For business websites: "What's the name of your business?"
+- For personal/portfolio: "What's your name or the name of your portfolio?"
+- For project/campaign: "What's the name of your project?"
+- For nonprofit: "What's the name of your organization?"
+
+Respond with valid JSON matching the required format.
+`
+      } else {
+        // Business name exists, proceed with normal first question
+        contextMessage = `
+${foundationContext}
+
+This is the START of the conversation. The user has completed foundation questions.
+
+SCOPE.md sections 2 (Project Classification) and 3 (Client Information) are already complete from foundation data.
+Business name: ${hasBusinessName}
 
 Your task: Determine which SCOPE.md section needs information next. Since this is the beginning, you should start with Section 4: Business Context.
 
@@ -492,29 +822,55 @@ Generate the FIRST question to gather business context information. The question
 
 Respond with valid JSON matching the required format.
 `
+      }
     } else {
+      // Check if business name is still missing (shouldn't happen, but safety check)
+      const hasBusinessName = intelligence?.businessName || intelligence?.companyName
+      
       contextMessage = `
 ${foundationContext}
 
 Current conversation state:
 - Questions Asked: ${questionCount || 0}
 - Intelligence Gathered: ${JSON.stringify(intelligence || {}, null, 2)}
+${!hasBusinessName ? '\n**CRITICAL: Business/company name is still missing. Ask for it before other business context questions.**' : ''}
+${isAnsweringBusinessName && !hasBusinessName ? '\n**CRITICAL: The user just answered a business/company name question. You MUST extract the business name from their answer and include it in the intelligence object as "businessName". DO NOT ask for it again.**' : ''}
 
 **PREVIOUSLY ASKED QUESTIONS (DO NOT ASK SIMILAR QUESTIONS):**
 ${askedQuestions.length > 0 ? askedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n') : 'None yet'}
+
+**TOPICS ALREADY COVERED (DO NOT ASK ABOUT THESE TOPICS AGAIN):**
+${askedQuestionTopics.size > 0 ? Array.from(askedQuestionTopics).map(topic => `- ${topic}`).join('\n') : 'None yet'}
+${hasServicesInfo ? '\n**CRITICAL: Services/value proposition information is already in intelligence. DO NOT ask about services, how you help, what problems you solve, or value proposition again.**' : ''}
+${hasCustomerInfo ? '\n**CRITICAL: Customer/audience information is already in intelligence (targetAudience: ' + (intelligence?.targetAudience || 'set') + '). DO NOT ask about customers, clients, audience, or target audience again.**' : ''}
+${hasBrandMaterials ? '\n**CRITICAL: Brand materials/assets have already been provided. DO NOT ask about brand materials, logos, or design assets again - mark Section 5 as complete or move to the next section.**' : ''}
+${askedQuestionTopics.has('brand_assets') ? '\n**CRITICAL: You have already asked about brand materials/assets. DO NOT ask similar questions like "Do you have brand materials?", "Do you have a logo?", or "What brand materials do you have?" - move to the next topic.**' : ''}
+${askedQuestionTopics.has('services') ? '\n**CRITICAL: You have already asked about services/value proposition/how they help. DO NOT ask similar questions like "How do you help...", "What problems do you solve...", "What challenges...", or "What value do you provide..." - move to the next topic.**' : ''}
+${askedQuestionTopics.has('customers') ? '\n**CRITICAL: You have already asked about customers/audience. DO NOT ask similar questions like "Who are your customers?", "What age range are your clients?", "Who are your typical customers?", or "Who do you serve?" - move to the next topic.**' : ''}
+${askedQuestionTopics.has('technology_comfort') ? '\n**CRITICAL: Technology comfort level questions are NOT RELEVANT to SCOPE.md requirements. DO NOT ask about technology comfort, technical sophistication, or how comfortable customers are with technology.**' : ''}
+${targetAudienceQuestions >= 1 ? '\n**CRITICAL: You have already asked ' + targetAudienceQuestions + ' question(s) about target audience. DO NOT ask about customers/audience again - move to the next subsection.**' : ''}
+${section4Questions >= 2 ? '\n**CRITICAL: You have already asked ' + section4Questions + ' question(s) for Section 4: Business Context. Maximum 2 questions per section. Move to the next section unless there is a CRITICAL gap.**' : ''}
 
 Based on this conversation history and current intelligence, determine:
 1. Which SCOPE.md section needs information next
 2. Whether you have sufficient information to write that section
 3. If insufficient, generate the next question with 3-6 smart options
-4. **CRITICAL: Keep question SHORT (10-12 words max) - cut out unnecessary words**
-5. **CRITICAL: Use SIMPLE WORDS - assume user knows nothing about web development**
-6. **CRITICAL: Be DIRECT - don't explain, just ask the question**
-7. **CRITICAL: Ensure the question is in plain English, warm and friendly - no jargon or technical terms**
-8. **CRITICAL: Focus on CURRENT state, not future goals - users should answer immediately without thinking**
-9. **CRITICAL: ONE simple question only - no compound questions**
-10. **CRITICAL: Never ask about competitive positioning or "what makes you special"**
-11. **CRITICAL: DO NOT ask questions similar to ones already asked - check the "PREVIOUSLY ASKED QUESTIONS" list above**
+${!hasBusinessName && !isAnsweringBusinessName ? '4. **CRITICAL: If business name is missing, ask for it FIRST before other business context questions**' : isAnsweringBusinessName ? '4. **CRITICAL: Extract the business name from the user\'s answer and include it in the intelligence object as "businessName". Then proceed to the next question.**' : '4. **CRITICAL: Keep question SHORT (10-12 words max) - cut out unnecessary words**'}
+5. **CRITICAL: Keep question SHORT (10-12 words max) - cut out unnecessary words**
+6. **CRITICAL: Use SIMPLE WORDS - assume user knows nothing about web development**
+7. **CRITICAL: Be DIRECT - don't explain, just ask the question**
+8. **CRITICAL: Ensure the question is in plain English, warm and friendly - no jargon or technical terms**
+9. **CRITICAL: Focus on CURRENT state, not future goals - users should answer immediately without thinking**
+10. **CRITICAL: ONE simple question only - no compound questions**
+11. **CRITICAL: Never ask about competitive positioning or "what makes you special"**
+12. **CRITICAL: DO NOT ask questions similar to ones already asked - check the "PREVIOUSLY ASKED QUESTIONS" list above**
+13. **CRITICAL: DO NOT ask about topics already covered - check the "TOPICS ALREADY COVERED" list above**
+14. **CRITICAL: If services information is already in intelligence, DO NOT ask about services again - move to the next topic**
+15. **CRITICAL: If customer/audience information is already in intelligence (targetAudience exists), DO NOT ask about customers/audience again - move to the next topic**
+16. **CRITICAL: Maximum 1 question per subsection (e.g., target audience, primary goal). Maximum 2 questions per SCOPE.md section. After reaching these limits, move to the next section/subsection.**
+17. **CRITICAL: If "services" topic is already covered, DO NOT ask similar questions like "How do you help...", "What problems do you solve...", "What challenges...", or "What value do you provide..." - these are all asking about the same thing**
+18. **CRITICAL: If "customers" topic is already covered, DO NOT ask similar questions like "Who are your customers?", "What age range are your clients?", "Who are your typical customers?", or "Who do you serve?" - these are all asking about the same thing**
+19. **CRITICAL: NEVER ask about technology comfort level, technical sophistication, or how comfortable customers/target audience are with technology - this is NOT relevant to SCOPE.md requirements**
 
 Respond with valid JSON matching the required format.
 `
@@ -558,14 +914,31 @@ Respond with valid JSON matching the required format.
     // Parse Claude's JSON response
     let claudeResponse
     try {
-      // Claude may wrap JSON in markdown code blocks
+      // Claude may wrap JSON in markdown code blocks or include text before/after
       const text = content.text.trim()
-      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/)
-      const jsonText = jsonMatch ? jsonMatch[1] : text
+      
+      // Try to extract JSON from markdown code blocks first
+      let jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/)
+      let jsonText = jsonMatch ? jsonMatch[1] : text
+      
+      // If no code blocks, try to find JSON object in the text
+      if (!jsonMatch) {
+        // Look for JSON object pattern: { ... }
+        const jsonObjectMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonObjectMatch) {
+          jsonText = jsonObjectMatch[0]
+        }
+      }
+      
+      // Clean up the JSON text - remove any leading/trailing text
+      jsonText = jsonText.trim()
+      
+      // Try to parse
       claudeResponse = JSON.parse(jsonText)
     } catch (parseError) {
       console.error('Failed to parse Claude response:', content.text)
-      throw new Error('Invalid JSON response from Claude')
+      console.error('Parse error:', parseError)
+      throw new Error(`Invalid JSON response from Claude: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}`)
     }
 
     // Validate response structure

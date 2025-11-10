@@ -15,6 +15,45 @@ export type {
   Question,
   ClaudeResponse,
 } from './conversation'
+export type {
+  ValidationType,
+  ValidationPrompt,
+  ValidationDetail,
+  ValidationOption,
+  ValidationResponse,
+  ValidationOutcome,
+  AllValidationOutcomes,
+} from './validation'
+
+// Phase 9: SCOPE.md Types
+export type {
+  ScopeDocument,
+  ExecutiveSummary,
+  ProjectClassification,
+  ClientInformation,
+  BusinessContext,
+  BrandAssets,
+  ContentStrategy,
+  TechnicalSpecifications,
+  MediaElements,
+  DesignDirection,
+  FeaturesBreakdown,
+  SupportPlan,
+  Timeline,
+  InvestmentSummary,
+  ValidationOutcomes,
+  ClientSummary,
+} from './scope'
+
+// Phase 10: Email Types
+export type {
+  EmailDelivery,
+  EmailAttachment,
+  ScopeMdEmail,
+  ClientSummaryEmail,
+  EmailTemplate,
+  CompletionData,
+} from './email'
 
 // Message Types
 export interface Message {

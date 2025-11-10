@@ -94,35 +94,15 @@ export function QuestionDisplay({
       >
         {/* Question header */}
         <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-              Question {questionNumber}
-              {totalEstimatedQuestions && ` of ~${totalEstimatedQuestions}`}
-            </span>
-            
-            {/* Progress indicator */}
-            {totalEstimatedQuestions && (
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ 
-                      width: `${(questionNumber / totalEstimatedQuestions) * 100}%` 
-                    }}
-                    transition={{ duration: 0.5, ease: 'easeOut' }}
-                    className="h-full bg-primary"
-                  />
-                </div>
-                <span className="text-xs text-gray-500">
-                  {Math.round((questionNumber / totalEstimatedQuestions) * 100)}%
-                </span>
-              </div>
-            )}
-          </div>
-          
           <h2 className="text-2xl font-semibold text-gray-900 leading-tight">
             {question.text}
           </h2>
+          {/* Helper text */}
+          {question.helperText && (
+            <p className="text-sm text-gray-600 mt-3">
+              {question.helperText}
+            </p>
+          )}
         </div>
         
         {/* Question body */}
@@ -185,13 +165,14 @@ export function QuestionDisplay({
               <Button
                 onClick={handleTextSubmit}
                 disabled={isSubmitting || !textValue.trim()}
-                className="w-full sm:w-auto"
+                className="w-full"
+                size="lg"
               >
                 {isSubmitting ? 'Submitting...' : 'Continue'}
               </Button>
             </div>
           ) : question.inputType === 'textarea' ? (
-            // Textarea input
+            // Textarea input (for multiple URLs or longer text)
             <div className="space-y-4">
               <div>
                 <textarea
@@ -203,7 +184,7 @@ export function QuestionDisplay({
                   onKeyDown={handleTextKeyDown}
                   placeholder={question.placeholder || 'Enter your answer...'}
                   disabled={isSubmitting}
-                  rows={3}
+                  rows={question.helperText?.toLowerCase().includes('url') || question.helperText?.toLowerCase().includes('link') ? 6 : 3}
                   className={`
                     w-full px-4 py-3 rounded-lg border transition-colors resize-none
                     focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
@@ -241,7 +222,8 @@ export function QuestionDisplay({
               <Button
                 onClick={handleTextSubmit}
                 disabled={isSubmitting || !textValue.trim()}
-                className="w-full sm:w-auto"
+                className="w-full"
+                size="lg"
               >
                 {isSubmitting ? 'Submitting...' : 'Continue'}
               </Button>
@@ -249,15 +231,6 @@ export function QuestionDisplay({
           ) : null}
         </div>
       </motion.div>
-      
-      {/* Optional help text or category indicator */}
-      <div className="mt-4 text-center">
-        <p className="text-xs text-gray-500">
-          Currently exploring: <span className="font-medium text-gray-700">
-            {formatCategoryName(question.category)}
-          </span>
-        </p>
-      </div>
     </div>
   )
 }

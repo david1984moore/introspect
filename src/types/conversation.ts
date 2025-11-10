@@ -29,30 +29,8 @@ export interface ConversationState {
 }
 
 // SCOPE.md Section Progress Tracking (V3.2)
-export type ScopeSectionStatus = 'not_started' | 'in_progress' | 'complete'
-
-export interface ScopeProgress {
-  sections: {
-    section1_executive_summary: ScopeSectionStatus
-    section2_project_classification: ScopeSectionStatus
-    section3_client_information: ScopeSectionStatus
-    section4_business_context: ScopeSectionStatus
-    section5_brand_assets: ScopeSectionStatus
-    section6_content_strategy: ScopeSectionStatus
-    section7_technical_specs: ScopeSectionStatus
-    section8_media_elements: ScopeSectionStatus
-    section9_design_direction: ScopeSectionStatus
-    section10_features_breakdown: ScopeSectionStatus
-    section11_support_plan: ScopeSectionStatus
-    section12_timeline: ScopeSectionStatus
-    section13_investment_summary: ScopeSectionStatus
-    section14_validation_outcomes: ScopeSectionStatus
-  }
-  overallCompleteness: number // 0-100%
-  sectionsComplete: number
-  sectionsInProgress: number
-  sectionsNotStarted: number
-}
+// Phase 7: Re-export from scopeProgress.ts for enhanced progress tracking
+export type { ScopeProgress, SectionStatus as ScopeSectionStatus } from './scopeProgress'
 
 // Sufficiency Evaluation (V3.2)
 export interface SufficiencyEvaluation {
@@ -94,12 +72,13 @@ export interface QuestionValidation {
 export interface Question {
   id: string
   text: string
-  inputType: 'radio' | 'checkbox' | 'text' | 'textarea'
+  inputType: 'radio' | 'checkbox' | 'text' | 'textarea' | 'file_upload'
   options?: QuestionOption[]
   category: string
   scope_section?: string
   scope_requirement?: string
   placeholder?: string // For text input questions (Phase 5)
+  helperText?: string // Helper text displayed below question (e.g., "copy/paste website links below")
   validation?: QuestionValidation // Phase 5
 }
 
