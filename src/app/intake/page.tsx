@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { ChevronLeft, Building, User, Rocket, Handshake, Sparkles } from 'lucide-react'
+import { ChevronLeft, Building, User, Rocket, Handshake, Sparkles, RotateCcw } from 'lucide-react'
 import { z } from 'zod'
 import { useConversationStore } from '@/stores/conversationStore'
+import { StartOverModal } from '@/components/StartOverModal'
 import type { FoundationData } from '@/types/conversation'
 
 // Validation schemas
@@ -33,13 +34,14 @@ const websiteTypes = [
 
 export default function FoundationForm() {
   const router = useRouter()
-  const { setFoundation, userName, userEmail, userPhone, websiteType } = useConversationStore()
+  const { setFoundation, userName, userEmail, userPhone, websiteType, completionPercentage } = useConversationStore()
   
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<Partial<FoundationFormData>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const phoneInputRef = useRef<HTMLInputElement>(null)
   const initializedRef = useRef(false)
+  const [showStartOverModal, setShowStartOverModal] = useState(false)
 
   // Initialize form data from store on mount (only once)
   useEffect(() => {
@@ -280,26 +282,53 @@ export default function FoundationForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
-        {/* Progress Indicator */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-600">
-              Step {currentStep} of 4
-            </span>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-3xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">
+                {userName ? `Welcome back, ${userName}` : 'Let\'s get started'}
+              </h1>
+              <p className="text-sm text-gray-600">
+                {websiteType ? `Building your ${websiteType} website` : 'Tell us about your project'}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-sm font-medium text-gray-900">
+                  {completionPercentage}% Complete
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowStartOverModal(true)}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Start Over
+              </Button>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <motion.div
-              className="bg-primary h-2 rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${(currentStep / 4) * 100}%` }}
-              transition={{ duration: 0.3 }}
-            />
+
+          {/* Progress Bar */}
+          <div className="mt-4">
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <motion.div
+                className="bg-primary h-full rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${completionPercentage}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Form Card */}
+      {/* Form Content */}
+      <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <AnimatePresence mode="wait">
             {/* Step 1: Name */}
@@ -525,7 +554,7 @@ export default function FoundationForm() {
                     size="lg"
                     disabled={!formData.websiteType}
                   >
-                    Start Conversation
+                    Continue
                   </Button>
                   <button
                     onClick={handleBack}
@@ -541,6 +570,12 @@ export default function FoundationForm() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Start Over Modal */}
+      <StartOverModal
+        open={showStartOverModal}
+        onOpenChange={setShowStartOverModal}
+      />
     </div>
   )
 }

@@ -24,9 +24,9 @@ You are an autonomous development assistant implementing a token-optimized workf
 3. **SCOPE.md** - Max 600 lines before archive - Project boundaries
 
 ### Reference Files (Loaded on Demand)
-4. **ALIASES.md** - Command reference
-5. **USER_GUIDE.md** - User documentation
-6. **QUICK_REF.md** - Cheat sheet
+4. **docs/reference/ALIASES.md** - Command reference
+5. **docs/reference/USER_GUIDE.md** - User documentation
+6. **docs/reference/QUICK_REF.md** - Cheat sheet
 
 ### Archive Structure
 ```
@@ -52,6 +52,7 @@ You are an autonomous development assistant implementing a token-optimized workf
 - `/debug` - Open Chrome, navigate to localhost, test current feature
 - `/verify` - Suggest testing approach for current implementation
 - `/commit` - Stage, commit, and push changes to git
+- `/memory` - Add current topic to archives/memories.md (in archives/ folder)
 
 ### Scope Control
 - `/scope` - Review boundaries, validate requests
@@ -253,6 +254,18 @@ ls -lt archives/
 # 5. Report: "Pushed: feat: implement user authentication"
 ```
 
+### `/memory` - Add to Memory File
+```bash
+# 1. Read current conversation context
+# 2. Extract the current topic/decision being discussed
+# 3. Format as markdown entry with:
+#    - Date (YYYY-MM-DD)
+#    - Status (Active/Deprecated/etc.)
+#    - Key points and implementation details
+# 4. Append to archives/memories.md
+# 5. Report: "Added to memories: [topic]"
+```
+
 ### `/archive` - File Management
 ```bash
 # 1. Check all workflow files:
@@ -346,7 +359,7 @@ Track in STATUS.md:
 
 - **Concise**: Brief confirmations, no fluff
 - **Direct**: Execute first, explain only if asked
-- **Autonomous**: Make decisions within scope
+- **Autonomous**: Make decisions ONLY within scope, If implementation and scope conflict, ask for clarity and present options to move forward. DO NOT execute without asking for permission. Always present multiple options for moving forward when a task has been completed. 
 - **Efficient**: Minimize token usage always
 
 ---

@@ -24,9 +24,12 @@ project-root/
 ├── .cursorrules           # AI instructions (~2K tokens, always loaded)
 ├── STATUS.md              # Current state (<800 tokens)
 ├── SCOPE.md               # Active boundaries (<600 tokens)
-├── ALIASES.md             # Command reference (on-demand)
-├── USER_GUIDE.md          # User docs (on-demand)
-├── QUICK_REF.md           # Cheat sheet (on-demand)
+├── docs/
+│   ├── reference/
+│   │   ├── ALIASES.md             # Command reference (on-demand)
+│   │   ├── USER_GUIDE.md          # User docs (on-demand)
+│   │   └── QUICK_REF.md           # Cheat sheet (on-demand)
+│   └── phases/                    # Phase documentation
 └── archives/              # Historical content
     ├── STATUS_20250105_143022.md
     ├── STATUS_20250104_091500.md
@@ -205,7 +208,7 @@ AI: Checking files for archiving...
     File size check:
     - STATUS.md: 47 lines ✓ OK
     - SCOPE.md: 82 lines ✓ OK
-    - ALIASES.md: 143 lines ✓ OK
+    - docs/reference/ALIASES.md: 143 lines ✓ OK
     
     No files require archiving.
 ```

@@ -45,12 +45,15 @@ your-project/
 ├── .cursorrules      # AI instructions (2K tokens)
 ├── STATUS.md         # Current tasks (auto-archives)
 ├── SCOPE.md          # Project boundaries
-├── ALIASES.md        # Command reference
-├── USER_GUIDE.md     # This file
-├── QUICK_REF.md      # Cheat sheet
+├── docs/
+│   ├── reference/
+│   │   ├── ALIASES.md        # Command reference
+│   │   ├── USER_GUIDE.md     # This file
+│   │   └── QUICK_REF.md       # Cheat sheet
+│   └── phases/                # Phase documentation
 └── archives/         # Auto-created when needed
     ├── STATUS_20250105_143022.md
-    └── SCOPE_20250105_143022.md
+    └── SCOPE_20251110_103552.md
 ```
 
 ---
@@ -241,7 +244,7 @@ You'll know the system works when:
 
 ### Getting Help
 1. Type `STOP` for context dump
-2. Check ALIASES.md for commands
+2. Check `docs/reference/ALIASES.md` for commands
 3. Review archives/ for history
 4. Reset with `/format` if needed
 

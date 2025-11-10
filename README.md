@@ -126,9 +126,9 @@ npm run lint
 ## 📚 Reference Documents
 
 - `SCOPE.md` - Core architectural principles
-- `PHASE_1_Foundation_Design_System_UPDATED.md` - Implementation guide
-- `APPLICREATIONS_FEATURE_LIBRARY_V1_1_COMPLETE.md` - Feature catalog
-- `FEATURE_RECOMMENDATION_RULES_V1.1.md` - Feature recommendation logic
+- `docs/phases/PHASE_1_Foundation_Design_System_UPDATED.md` - Implementation guide
+- `docs/APPLICREATIONS_FEATURE_LIBRARY_V1_1_COMPLETE.md` - Feature catalog
+- `docs/reference/` - Workflow documentation (ALIASES.md, USER_GUIDE.md, QUICK_REF.md)
 
 ---
 

@@ -15,6 +15,7 @@ import type {
   ValidationLoop,
 } from '@/types'
 import type { BusinessModel } from '@/types/business-models'
+import type { ScopeProgress, ClaudeResponse, Question } from '@/types/conversation'
 
 interface ConversationState {
   // Session Management
@@ -59,6 +60,15 @@ interface ConversationState {
   categoryProgress: Record<string, number>
   estimatedTimeRemaining: number
   
+  // SCOPE.md Progress Tracking (V3.2)
+  scopeProgress: ScopeProgress
+  currentQuestion: Question | null
+  
+  // Feature Recommendations (V3.2)
+  featureRecommendations: FeatureRecommendation[] | null
+  packageRecommendation: PackageRecommendation | null
+  showingFeatureSelection: boolean
+  
   // Security & Monitoring
   lastActivity: Date
   ipAddress: string | null
@@ -91,7 +101,14 @@ interface ConversationState {
   detectAbandonmentRisk: () => boolean
   validateAndSanitize: (input: string) => string
   calculateCompleteness: () => number
+  calculateCompletionFromSections: () => number
   reset: () => void
+  
+  // Actions - Claude Orchestration (V3.2)
+  orchestrateNext: () => Promise<ClaudeResponse | null>
+  submitAnswer: (answer: string, questionId: string) => Promise<void>
+  updateScopeProgress: (progress: Partial<ScopeProgress>) => void
+  submitFeatureSelection: (selectedFeatureIds: string[]) => Promise<void>
 }
 
 // Enhanced input validation with prompt injection detection
@@ -175,9 +192,45 @@ export const useConversationStore = create<ConversationState>()(
         projectParameters: 0,
       },
       estimatedTimeRemaining: 20,
+      scopeProgress: {
+        sections: {
+          section1_executive_summary: 'not_started',
+          section2_project_classification: 'not_started',
+          section3_client_information: 'not_started',
+          section4_business_context: 'not_started',
+          section5_brand_assets: 'not_started',
+          section6_content_strategy: 'not_started',
+          section7_technical_specs: 'not_started',
+          section8_media_elements: 'not_started',
+          section9_design_direction: 'not_started',
+          section10_features_breakdown: 'not_started',
+          section11_support_plan: 'not_started',
+          section12_timeline: 'not_started',
+          section13_investment_summary: 'not_started',
+          section14_validation_outcomes: 'not_started',
+        },
+        overallCompleteness: 0,
+        sectionsComplete: 0,
+        sectionsInProgress: 0,
+        sectionsNotStarted: 14,
+      },
+      currentQuestion: null,
+      featureRecommendations: null,
+      packageRecommendation: null,
+      showingFeatureSelection: false,
       lastActivity: new Date(),
       ipAddress: null,
       suspiciousActivityCount: 0,
+      
+      // Helper function to calculate completion percentage based on completed sections
+      calculateCompletionFromSections: () => {
+        const state = get()
+        const totalSections = 14
+        const completedSections = Object.values(state.scopeProgress.sections).filter(
+          (status) => status === 'complete'
+        ).length
+        return Math.round((completedSections / totalSections) * 100)
+      },
       
       // Actions
       setFoundation: (data) => {
@@ -188,11 +241,33 @@ export const useConversationStore = create<ConversationState>()(
           websiteType: validateInput(data.websiteType),
         }
         
+        // Initialize SCOPE.md sections 2 and 3 as complete (foundation data)
+        const state = get()
+        const updatedProgress = {
+          ...state.scopeProgress,
+          sections: {
+            ...state.scopeProgress.sections,
+            section2_project_classification: 'complete',
+            section3_client_information: 'complete',
+          },
+        }
+        
+        // Calculate completed sections
+        const completedSections = Object.values(updatedProgress.sections).filter(
+          (status) => status === 'complete'
+        ).length
+        
         set({
           ...sanitized,
           currentCategory: 'business_context',
-          completionPercentage: 15,
           lastActivity: new Date(),
+          scopeProgress: {
+            ...updatedProgress,
+            sectionsComplete: completedSections,
+            sectionsNotStarted: 14 - completedSections,
+            overallCompleteness: Math.round((completedSections / 14) * 100),
+          },
+          completionPercentage: Math.round((completedSections / 14) * 100),
         })
         
         // Trigger cloud sync
@@ -244,14 +319,24 @@ export const useConversationStore = create<ConversationState>()(
       },
       
       updateIntelligence: (data) => {
-        set((state) => ({
-          intelligence: { ...state.intelligence, ...data },
-          lastActivity: new Date(),
-        }))
-        
-        // Recalculate completeness
-        const completeness = get().calculateCompleteness()
-        set({ completionPercentage: completeness })
+        set((state) => {
+          const updatedIntelligence = { ...state.intelligence, ...data }
+          
+          // Calculate completion based on completed sections, not old category system
+          const completedSections = Object.values(state.scopeProgress.sections).filter(
+            (status) => status === 'complete'
+          ).length
+          const newCompletionPercentage = Math.round((completedSections / 14) * 100)
+          
+          // CRITICAL: Progress should NEVER decrease
+          const finalCompletionPercentage = Math.max(state.completionPercentage, newCompletionPercentage)
+          
+          return {
+            intelligence: updatedIntelligence,
+            lastActivity: new Date(),
+            completionPercentage: finalCompletionPercentage,
+          }
+        })
       },
       
       // Conflict Detection
@@ -500,10 +585,362 @@ export const useConversationStore = create<ConversationState>()(
             projectParameters: 0,
           },
           estimatedTimeRemaining: 20,
+          scopeProgress: {
+            sections: {
+              section1_executive_summary: 'not_started',
+              section2_project_classification: 'not_started',
+              section3_client_information: 'not_started',
+              section4_business_context: 'not_started',
+              section5_brand_assets: 'not_started',
+              section6_content_strategy: 'not_started',
+              section7_technical_specs: 'not_started',
+              section8_media_elements: 'not_started',
+              section9_design_direction: 'not_started',
+              section10_features_breakdown: 'not_started',
+              section11_support_plan: 'not_started',
+              section12_timeline: 'not_started',
+              section13_investment_summary: 'not_started',
+              section14_validation_outcomes: 'not_started',
+            },
+            overallCompleteness: 0,
+            sectionsComplete: 0,
+            sectionsInProgress: 0,
+            sectionsNotStarted: 14,
+          },
+          currentQuestion: null,
+          featureRecommendations: null,
+          packageRecommendation: null,
+          showingFeatureSelection: false,
           lastActivity: new Date(),
           ipAddress: null,
           suspiciousActivityCount: 0,
         })
+      },
+      
+      // Claude Orchestration (V3.2)
+      orchestrateNext: async () => {
+        const state = get()
+        
+        if (!state.websiteType || !state.userEmail) {
+          console.error('Cannot orchestrate without foundation data')
+          return null
+        }
+        
+        set({ isTyping: true })
+        
+        try {
+          const response = await fetch('/api/claude/orchestrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversation: state.messages,
+              intelligence: state.intelligence,
+              websiteType: state.websiteType,
+              questionCount: state.questionCount,
+              foundation: {
+                userName: state.userName,
+                userEmail: state.userEmail,
+                userPhone: state.userPhone,
+                websiteType: state.websiteType,
+              },
+              currentQuestion: state.currentQuestion ? {
+                id: state.currentQuestion.id,
+                text: state.currentQuestion.text,
+              } : null,
+            }),
+          })
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error', details: 'Failed to parse error response' }))
+            console.error('Orchestration API error:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData,
+            })
+            throw new Error(errorData.details || errorData.error || `Orchestration failed: ${response.status} ${response.statusText}`)
+          }
+          
+          const claudeResponse: ClaudeResponse = await response.json()
+          
+          // Update SCOPE.md progress based on actual section status
+          if (claudeResponse.progress) {
+            // CRITICAL: Start with existing sections to preserve already-completed sections
+            // This ensures sections 2 & 3 (from foundation) are never lost
+            const updatedSections = { ...state.scopeProgress.sections }
+            
+            // Helper function to map Claude's section names to our section keys
+            const mapSectionName = (sectionName: string): string | null => {
+              const normalized = sectionName.toLowerCase().trim()
+              // Handle various formats: "Section 1", "section1", "Section 1: Executive Summary", etc.
+              const sectionMatch = normalized.match(/section\s*(\d+)/)
+              if (sectionMatch) {
+                const num = sectionMatch[1]
+                const sectionMap: Record<string, string> = {
+                  '1': 'section1_executive_summary',
+                  '2': 'section2_project_classification',
+                  '3': 'section3_client_information',
+                  '4': 'section4_business_context',
+                  '5': 'section5_brand_assets',
+                  '6': 'section6_content_strategy',
+                  '7': 'section7_technical_specs',
+                  '8': 'section8_media_elements',
+                  '9': 'section9_design_direction',
+                  '10': 'section10_features_breakdown',
+                  '11': 'section11_support_plan',
+                  '12': 'section12_timeline',
+                  '13': 'section13_investment_summary',
+                  '14': 'section14_validation_outcomes',
+                }
+                return sectionMap[num] || null
+              }
+              return null
+            }
+            
+            // Mark sections as complete if Claude says they're complete
+            // Only update if not already complete (preserve existing completed sections)
+            claudeResponse.progress.scope_sections_complete.forEach((sectionName: string) => {
+              const sectionKey = mapSectionName(sectionName)
+              if (sectionKey && sectionKey in updatedSections) {
+                // Only mark as complete if not already complete (preserve state)
+                if (updatedSections[sectionKey as keyof typeof updatedSections] !== 'complete') {
+                  updatedSections[sectionKey as keyof typeof updatedSections] = 'complete'
+                }
+              }
+            })
+            
+            // Mark sections as in progress (only if not already complete or in progress)
+            claudeResponse.progress.scope_sections_in_progress.forEach((sectionName: string) => {
+              const sectionKey = mapSectionName(sectionName)
+              if (sectionKey && sectionKey in updatedSections) {
+                const currentStatus = updatedSections[sectionKey as keyof typeof updatedSections]
+                // Only mark as in_progress if currently not_started (don't downgrade from complete)
+                if (currentStatus === 'not_started') {
+                  updatedSections[sectionKey as keyof typeof updatedSections] = 'in_progress'
+                }
+              }
+            })
+            
+            // Calculate actual completed sections from updated state
+            const completedSections = Object.values(updatedSections).filter(
+              (status) => status === 'complete'
+            ).length
+            const inProgressSections = Object.values(updatedSections).filter(
+              (status) => status === 'in_progress'
+            ).length
+            const notStartedSections = Object.values(updatedSections).filter(
+              (status) => status === 'not_started'
+            ).length
+            
+            // Calculate completion percentage based on completed sections only
+            const newCompletionPercentage = Math.round((completedSections / 14) * 100)
+            
+            // CRITICAL: Progress should NEVER decrease - use Math.max to ensure it only increases
+            // This is a safety net in case section counting is wrong
+            const currentCompletion = state.completionPercentage
+            const finalCompletionPercentage = Math.max(currentCompletion, newCompletionPercentage)
+            
+            set({
+              scopeProgress: {
+                sections: updatedSections,
+                overallCompleteness: finalCompletionPercentage,
+                sectionsComplete: completedSections,
+                sectionsInProgress: inProgressSections,
+                sectionsNotStarted: notStartedSections,
+              },
+              completionPercentage: finalCompletionPercentage,
+            })
+          }
+          
+          // Handle feature recommendations
+          if (claudeResponse.action === 'recommend_features' && claudeResponse.content.features) {
+            const featuresData = claudeResponse.content.features
+            const pkg = featuresData.package
+            
+            // Convert to FeatureRecommendation format
+            const featureRecs: FeatureRecommendation[] = (featuresData.recommended || []).map((f: any) => ({
+              id: f.id,
+              name: f.name,
+              description: f.description,
+              price: f.price,
+              reasoning: f.reasoning,
+              priority: f.priority === 'highly_recommended' ? 'highly_recommended' : 
+                       f.priority === 'recommended' ? 'highly_recommended' : 'nice_to_have',
+              roi: f.roi,
+            }))
+            
+            const packageRec: PackageRecommendation = {
+              package: pkg as 'starter' | 'professional' | 'custom',
+              rationale: `Based on your needs, we recommend the ${pkg} package.`,
+              basePrice: pkg === 'starter' ? 2500 : pkg === 'professional' ? 4500 : 6000,
+              included: featuresData.included || [],
+            }
+            
+            // Add assistant message about features
+            get().addMessage({
+              role: 'assistant',
+              content: `Based on your needs, I've prepared a selection of features for your ${state.websiteType} website. Please select the ones that fit your project.`,
+            })
+            
+            set({
+              featureRecommendations: featureRecs,
+              packageRecommendation: packageRec,
+              showingFeatureSelection: true,
+              currentQuestion: null,
+              isTyping: false,
+            })
+            
+            // Present features in store
+            get().presentFeatures(featureRecs, packageRec)
+          }
+          
+          // Handle question action
+          else if (claudeResponse.action === 'ask_question' && claudeResponse.content.question) {
+            const question = claudeResponse.content.question
+            
+            // DO NOT add question text as a message - questions are displayed in currentQuestion box only
+            // Messages array is for conversation history, not for displaying questions
+            
+            // Update intelligence if provided
+            if (claudeResponse.intelligence) {
+              get().updateIntelligence(claudeResponse.intelligence)
+            }
+            
+            set({
+              currentQuestion: question,
+              currentQuestionId: question.id,
+              showingFeatureSelection: false,
+              isTyping: false,
+            })
+          }
+          
+          // Handle completion
+          else if (claudeResponse.action === 'complete') {
+            // Mark all sections as complete
+            const allSectionsComplete: Record<string, 'complete'> = {}
+            Object.keys(state.scopeProgress.sections).forEach((key) => {
+              allSectionsComplete[key] = 'complete'
+            })
+            
+            set({
+              isTyping: false,
+              scopeProgress: {
+                sections: allSectionsComplete as any,
+                overallCompleteness: 100,
+                sectionsComplete: 14,
+                sectionsInProgress: 0,
+                sectionsNotStarted: 0,
+              },
+              completionPercentage: 100,
+              showingFeatureSelection: false,
+            })
+          }
+          
+          return claudeResponse
+        } catch (error) {
+          console.error('Orchestration error:', error)
+          set({ isTyping: false })
+          return null
+        }
+      },
+      
+      submitAnswer: async (answer, questionId) => {
+        const state = get()
+        const sanitized = validateInput(answer)
+        
+        // Get the question that was answered before clearing it
+        const answeredQuestion = state.currentQuestion
+        
+        // Add user message with question context so Claude knows what was answered
+        get().addMessage({
+          role: 'user',
+          content: sanitized,
+          metadata: {
+            questionId,
+            questionText: answeredQuestion?.text, // Include question text for context
+            questionCategory: answeredQuestion?.category,
+          },
+        })
+        
+        // Update intelligence based on answer
+        // This will be enhanced as we gather more context
+        
+        // Clear current question
+        set({ currentQuestion: null, currentQuestionId: null })
+        
+        // Trigger next orchestration
+        await get().orchestrateNext()
+      },
+      
+      updateScopeProgress: (progress) => {
+        set((state) => ({
+          scopeProgress: {
+            ...state.scopeProgress,
+            ...progress,
+          },
+        }))
+      },
+      
+      submitFeatureSelection: async (selectedFeatureIds) => {
+        const state = get()
+        
+        if (!state.featureRecommendations || !state.packageRecommendation) {
+          console.error('No feature recommendations available')
+          return
+        }
+        
+        // Update feature selection
+        get().selectFeatures(selectedFeatureIds)
+        
+        // Add user message
+        get().addMessage({
+          role: 'user',
+          content: `Selected ${selectedFeatureIds.length} feature${selectedFeatureIds.length !== 1 ? 's' : ''}`,
+        })
+        
+        // Clear feature selection UI
+        set({
+          showingFeatureSelection: false,
+          featureRecommendations: null,
+          packageRecommendation: null,
+        })
+        
+        // Update SCOPE.md section 10 as complete
+        set((state) => {
+          const updatedSections = {
+            ...state.scopeProgress.sections,
+            section10_features_breakdown: 'complete',
+          }
+          
+          // Calculate actual completed sections
+          const completedSections = Object.values(updatedSections).filter(
+            (status) => status === 'complete'
+          ).length
+          const inProgressSections = Object.values(updatedSections).filter(
+            (status) => status === 'in_progress'
+          ).length
+          const notStartedSections = Object.values(updatedSections).filter(
+            (status) => status === 'not_started'
+          ).length
+          
+          const newCompletionPercentage = Math.round((completedSections / 14) * 100)
+          
+          // CRITICAL: Progress should NEVER decrease
+          const finalCompletionPercentage = Math.max(state.completionPercentage, newCompletionPercentage)
+          
+          return {
+            scopeProgress: {
+              sections: updatedSections,
+              overallCompleteness: finalCompletionPercentage,
+              sectionsComplete: completedSections,
+              sectionsInProgress: inProgressSections,
+              sectionsNotStarted: notStartedSections,
+            },
+            completionPercentage: finalCompletionPercentage,
+          }
+        })
+        
+        // Continue orchestration
+        await get().orchestrateNext()
       },
     }),
     {

@@ -55,6 +55,13 @@
 - **Pushes to origin/main**
 - Reports: "Pushed: feat: [task name]"
 
+### `/memory` - Add to Memory File
+- Reads current conversation context
+- Extracts the current topic/decision being discussed
+- Appends formatted entry to `archives/memories.md`
+- Includes date, status, and key details
+- Reports: "Added to memories: [topic]"
+
 ## 🎯 Scope Management
 
 ### `/scope` - Check boundaries

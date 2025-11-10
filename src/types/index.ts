@@ -7,6 +7,14 @@ import type { BusinessModel } from './business-models'
 export type { BusinessModel } from './business-models'
 export type { FoundationData } from './conversation'
 export type { WebsiteType } from './conversation'
+export type { 
+  ScopeProgress, 
+  ScopeSectionStatus,
+  SufficiencyEvaluation,
+  QuestionOption,
+  Question,
+  ClaudeResponse,
+} from './conversation'
 
 // Message Types
 export interface Message {
