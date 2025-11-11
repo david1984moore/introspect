@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useConversationStore } from '@/stores/conversationStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,9 @@ import { FeatureChipGrid } from '@/components/conversation/FeatureChipGrid'
 import { ValidationRouter } from '@/components/conversation/ValidationRouter'
 import { ScopeProgressPanel } from '@/components/conversation/ScopeProgressPanel'
 import { MobileProgressHeader } from '@/components/conversation/MobileProgressHeader'
+import { ProcessingIndicator } from '@/components/conversation/ProcessingIndicator'
+import { AmbientBackground } from '@/components/conversation/AmbientBackground'
+import { ConversationAnimationController } from '@/lib/conversationAnimationState'
 import { useContextDisplay } from '@/hooks/useContextDisplay'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { QuestionOption, ConversationIntelligence } from '@/types/conversation'
@@ -54,6 +57,9 @@ export default function ConversationPage() {
     completeConversation, // Phase 10: Complete conversation and send emails
     isGeneratingScope, // Phase 10: Loading state
     isCompletingConversation, // Phase 10: Completion loading state
+    getAllFacts, // Phase 3: Get conversation facts for processing indicator
+    getRecentFacts, // Phase 3: Get recent facts (optimized for ProcessingIndicator)
+    getCompressionMetrics, // Phase 3: Get compression metrics for monitoring
   } = useConversationStore()
 
   const [selectedOption, setSelectedOption] = useState<string>('')
@@ -62,6 +68,20 @@ export default function ConversationPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [hasInitialized, setHasInitialized] = useState(false)
   const [showStartOverModal, setShowStartOverModal] = useState(false)
+  
+  // Phase 3: Animation controller
+  const animationController = useRef(new ConversationAnimationController())
+  const [animationState, setAnimationState] = useState(animationController.current.getState())
+  
+  // Reset animation controller on mount to ensure clean state
+  useEffect(() => {
+    console.log('[ConversationPage] Initializing animation controller. Initial phase:', animationController.current.getState().phase)
+    animationController.current.reset()
+    setAnimationState(animationController.current.getState())
+  }, [])
+  
+  // Phase 3: Store pending answer for delayed submission after animation
+  const pendingAnswerRef = useRef<{ value: string; questionId: string } | null>(null)
   
   // Responsive breakpoints
   const isMobile = useMediaQuery('(max-width: 768px)')
@@ -122,12 +142,33 @@ export default function ConversationPage() {
   useEffect(() => {
     if (!hasInitialized && userName && userEmail && !currentQuestion && !isTyping) {
       setHasInitialized(true)
+      // Set animation phase to processing immediately to show ProcessingIndicator instead of old typing indicator
+      animationController.current.setPhase('processing')
       orchestrateNext()
         .catch((error) => {
           console.error('Failed to initialize conversation:', error)
+          // Reset animation phase on error
+          animationController.current.setPhase('idle')
         })
     }
   }, [hasInitialized, userName, userEmail, currentQuestion, isTyping, orchestrateNext])
+  
+  // When isTyping becomes true and we don't have a question yet, ensure we're in processing phase
+  useEffect(() => {
+    if (isTyping && !currentQuestion && animationState.phase !== 'processing') {
+      console.log('[ConversationPage] Setting animation phase to processing while waiting for first question')
+      animationController.current.setPhase('processing')
+    }
+  }, [isTyping, currentQuestion, animationState.phase])
+  
+  // Ensure processing phase is set when transitioning from foundational form
+  // This prevents the empty state from showing briefly
+  useEffect(() => {
+    if (userName && userEmail && !currentQuestion && !isTyping && animationState.phase !== 'processing' && !hasInitialized) {
+      console.log('[ConversationPage] Setting animation phase to processing for foundational transition')
+      animationController.current.setPhase('processing')
+    }
+  }, [userName, userEmail, currentQuestion, isTyping, animationState.phase, hasInitialized])
   
   // Phase 7: Update progress when intelligence changes
   useEffect(() => {
@@ -136,12 +177,143 @@ export default function ConversationPage() {
     }
   }, [intelligence, featureSelection, userName, userEmail, updateProgress])
 
-  // Clear uploaded files when question changes
+  // Phase 3: Subscribe to animation state changes
+  useEffect(() => {
+    const unsubscribe = animationController.current.subscribe((newState) => {
+      console.log('[ConversationPage] Animation state changed:', newState.phase, 'selectedOption:', newState.selectedOptionId)
+      setAnimationState(newState)
+    })
+    return unsubscribe
+  }, [])
+  
+  // Phase 3: Track last question ID to prevent re-triggering animations
+  // Keep track of the PREVIOUS question ID, not reset to null
+  const lastQuestionIdRef = useRef<string | null>(null)
+  // Track if we've already processed this question ID to handle race conditions
+  const processedQuestionIdsRef = useRef<Set<string>>(new Set())
+  
+  // Reset animation tracking when transitioning from foundational questions
+  // This ensures the first conversation question always animates
+  const hasResetForFirstQuestionRef = useRef(false)
+  useEffect(() => {
+    // Reset when we have foundation data but no current question (transitioning from foundational)
+    // Only reset once per mount to avoid interfering with normal question flow
+    // Don't reset if we're already in processing phase (initialization has started)
+    if (!hasResetForFirstQuestionRef.current && 
+        userName && 
+        userEmail && 
+        !currentQuestion && 
+        animationState.phase !== 'processing') {
+      console.log('[ConversationPage] 🔄 Resetting animation tracking for first conversation question')
+      lastQuestionIdRef.current = null
+      processedQuestionIdsRef.current.clear()
+      animationController.current.reset()
+      hasResetForFirstQuestionRef.current = true
+    }
+  }, [userName, userEmail, currentQuestion, animationState.phase])
+  
+  // Phase 3: When new question arrives, trigger entrance animation
   useEffect(() => {
     if (currentQuestion) {
-      setUploadedFiles([])
+      const questionId = currentQuestion.id
+      const previousQuestionId = lastQuestionIdRef.current
+      const hasProcessedThisId = processedQuestionIdsRef.current.has(questionId)
+      const isFirstQuestion = previousQuestionId === null
+      
+      // Only trigger animation if this is a NEW question (different ID) AND we haven't processed it yet
+      if (questionId !== previousQuestionId && !hasProcessedThisId) {
+        // For first question, ALWAYS trigger animation regardless of isTyping or phase
+        // This ensures smooth transition from foundational questions
+        if (isFirstQuestion) {
+          console.log('[ConversationPage] 🎯 First question detected, triggering animation immediately. Question ID:', questionId, 'isTyping:', isTyping)
+          // Mark as processed BEFORE triggering to prevent re-triggering
+          processedQuestionIdsRef.current.add(questionId)
+          // Update the ref BEFORE triggering to prevent re-triggering
+          lastQuestionIdRef.current = questionId
+          animationController.current.setNewQuestion(currentQuestion)
+          return
+        }
+        
+        // For subsequent questions, wait for typing to complete if it's active
+        if (isTyping) {
+          console.log('[ConversationPage] ⏳ Question arrived while typing, will trigger animation when typing completes. Question ID:', questionId)
+          // Don't mark as processed yet - allow retry when isTyping becomes false
+          return
+        }
+        
+        console.log('[ConversationPage] 🔍 Question ID changed:', previousQuestionId, '→', questionId, 'Phase:', animationState.phase, 'isTyping:', isTyping)
+        
+        // Determine if we should trigger animation
+        // Blocking phases: questionExit, optionSelected (don't interrupt these)
+        const isBlockingPhase = animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'
+        
+        // Trigger animation in these cases:
+        // 1. Processing phase (normal flow after exit) - MOST COMMON
+        // 2. Idle/ready/questionEnter phases with previous question (normal transitions)
+        // 3. FALLBACK: Any non-blocking phase if we have a previous question (safety net)
+        const shouldTrigger = 
+          animationState.phase === 'processing' ||
+          (['idle', 'ready', 'questionEnter'].includes(animationState.phase) && previousQuestionId !== null) ||
+          (!isBlockingPhase && previousQuestionId !== null) // Fallback safety net
+        
+        console.log('[ConversationPage] 📊 Animation trigger check:', {
+          shouldTrigger,
+          isFirstQuestion,
+          isBlockingPhase,
+          phase: animationState.phase,
+          previousId: previousQuestionId,
+          currentId: questionId,
+          hasProcessedThisId
+        })
+        
+        if (shouldTrigger) {
+          console.log('[ConversationPage] ✅ TRIGGERING entrance animation! Phase:', animationState.phase, 'Question ID:', questionId)
+          // Mark as processed BEFORE triggering to prevent re-triggering
+          processedQuestionIdsRef.current.add(questionId)
+          // Update the ref BEFORE triggering to prevent re-triggering
+          lastQuestionIdRef.current = questionId
+          animationController.current.setNewQuestion(currentQuestion)
+        } else {
+          console.warn('[ConversationPage] ⚠️ SKIPPING animation trigger:', {
+            phase: animationState.phase,
+            previousId: previousQuestionId,
+            currentId: questionId,
+            isBlocking: isBlockingPhase,
+            reason: 'Conditions not met - will retry when phase changes'
+          })
+          // Don't update the ref - allow retry when phase changes
+        }
+      } else if (questionId === previousQuestionId) {
+        console.log('[ConversationPage] ℹ️ Same question ID, skipping animation:', questionId)
+      } else if (hasProcessedThisId) {
+        console.log('[ConversationPage] ℹ️ Question ID already processed, skipping animation:', questionId)
+      }
     }
-  }, [currentQuestion?.id])
+  }, [currentQuestion?.id, animationState.phase, isTyping, currentQuestion]) // Include currentQuestion to catch all changes
+  
+  // Phase 3: Submit pending answer when processing phase starts (after exit animation)
+  useEffect(() => {
+    if (animationState.phase === 'processing' && pendingAnswerRef.current) {
+      const { value, questionId } = pendingAnswerRef.current
+      pendingAnswerRef.current = null // Clear pending answer
+      
+      // DON'T reset lastQuestionIdRef here - it breaks the animation trigger logic
+      // The ref tracks the PREVIOUS question, and will be updated when new question arrives
+      
+      console.log('[ConversationPage] Submitting answer in processing phase. Question ID:', questionId, 'Last question ID ref:', lastQuestionIdRef.current)
+      
+      // Submit answer now (question is already hidden by exit animation)
+      submitAnswer(value, questionId)
+        .then(() => {
+          setSelectedOption('')
+          setSelectedOptions([])
+          setCustomText('')
+        })
+        .catch((error) => {
+          console.error('Failed to submit answer:', error)
+        })
+    }
+  }, [animationState.phase, submitAnswer])
 
   const handleOptionSelect = (value: string) => {
     setSelectedOption(value)
@@ -184,6 +356,11 @@ export default function ConversationPage() {
     // Handle radio (single-select) questions
     else if (currentQuestion.inputType === 'radio') {
       answer = selectedOption
+      
+      // Phase 3: Trigger animation sequence for option selection
+      if (selectedOption) {
+        animationController.current.selectOption(selectedOption)
+      }
       
       // If "Something else" selected and custom text provided
       if (selectedOption === 'other' && customText.trim()) {
@@ -257,6 +434,9 @@ export default function ConversationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Phase 3: Ambient Background */}
+      <AmbientBackground />
+      
       {/* Mobile Progress Header */}
       {isMobile && scopeProgress && (
         <MobileProgressHeader
@@ -305,6 +485,7 @@ export default function ConversationPage() {
                 variant="compact"
                 collapsible
                 defaultExpanded={false}
+                answeredQuestions={getAllFacts()}
               />
             </div>
           </aside>
@@ -312,17 +493,16 @@ export default function ConversationPage() {
 
         {/* Conversation Area */}
         <div className={isDesktop ? 'col-span-8' : 'max-w-3xl mx-auto'}>
-        {/* Typing Indicator */}
-        {isTyping && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 text-gray-500 mb-8"
-          >
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Thinking...</span>
-          </motion.div>
+        {/* Phase 3: Processing Indicator */}
+        {animationState.phase === 'processing' && (
+          <ProcessingIndicator
+            compressedFacts={getAllFacts()}
+            visible={true}
+          />
         )}
+
+        {/* REMOVED: Old typing indicator - replaced by ProcessingIndicator */}
+        {/* The ProcessingIndicator handles all loading states now */}
 
         {/* Phase 8: Validation Screen */}
         {isValidationMode && currentValidation && (
@@ -356,25 +536,80 @@ export default function ConversationPage() {
         )}
 
         {/* Question Display - Use QuestionDisplay component for radio, text, and textarea */}
-        {!isValidationMode && currentQuestion && 
-         !isTyping && 
-         !isFeatureSelectionMode && 
-         (currentQuestion.inputType === 'radio' || 
-          currentQuestion.inputType === 'text' || 
-          currentQuestion.inputType === 'textarea') && (
-          <QuestionDisplay
-            question={currentQuestion}
-            intelligence={conversationIntelligence}
-            questionNumber={questionCount}
-            onAnswer={async (value: string) => {
-              await submitAnswer(value, currentQuestion.id)
-              setSelectedOption('')
-              setSelectedOptions([])
-              setCustomText('')
-            }}
-            isSubmitting={isTyping}
-            compact={compact}
-          />
+        {/* Show during idle, optionSelected, questionExit, questionEnter, and ready phases */}
+        {/* Hide during processing phase (showing ProcessingIndicator instead) */}
+        {/* Use AnimatePresence to handle exit animations properly - component stays mounted during questionExit */}
+        {!isValidationMode && !isFeatureSelectionMode && 
+         (currentQuestion?.inputType === 'radio' || 
+          currentQuestion?.inputType === 'text' || 
+          currentQuestion?.inputType === 'textarea') && (
+          <AnimatePresence mode="wait">
+            {currentQuestion && 
+             (animationState.phase !== 'processing') && (
+              <QuestionDisplay
+                key={currentQuestion.id}
+                question={currentQuestion}
+                intelligence={conversationIntelligence}
+                questionNumber={questionCount}
+                onAnswer={async (value: string) => {
+                  console.log('[ConversationPage] onAnswer called:', value, 'question type:', currentQuestion?.inputType)
+                  
+                  // For ALL question types, trigger animation sequence before submitting
+                  if (currentQuestion?.inputType === 'radio' && value) {
+                    const option = currentQuestion.options?.find(o => o.value === value || o.label === value)
+                    console.log('[ConversationPage] Found option:', option?.value, 'for value:', value)
+                    if (option) {
+                      // Store answer for delayed submission
+                      pendingAnswerRef.current = {
+                        value: value,
+                        questionId: currentQuestion.id
+                      }
+                      
+                      console.log('[ConversationPage] Calling selectOption with:', option.value)
+                      // Trigger animation sequence (will transition to processing phase)
+                      animationController.current.selectOption(option.value)
+                      
+                      // Don't submit immediately - wait for processing phase
+                      return
+                    } else {
+                      console.warn('[ConversationPage] Option not found for value:', value, 'available options:', currentQuestion.options?.map(o => o.value))
+                    }
+                  }
+                  
+                  // For text/textarea questions, also trigger animation sequence
+                  if (currentQuestion?.inputType === 'text' || currentQuestion?.inputType === 'textarea') {
+                    // Allow empty value for skip
+                    const answerValue = value || '' // Empty string is valid for skip
+                    
+                    // Store answer for delayed submission
+                    pendingAnswerRef.current = {
+                      value: answerValue,
+                      questionId: currentQuestion.id
+                    }
+                    
+                    console.log('[ConversationPage] Triggering exit animation for text/textarea question', value ? '(with answer)' : '(skipped)')
+                    // Trigger exit animation sequence (similar to radio, but without option selection)
+                    // Use a dummy option ID to trigger the animation sequence
+                    animationController.current.selectOption('text_answer')
+                    
+                    // Don't submit immediately - wait for processing phase
+                    return
+                  }
+                  
+                  // Fallback: For other question types, submit immediately
+                  console.log('[ConversationPage] Submitting answer immediately (fallback)')
+                  await submitAnswer(value, currentQuestion.id)
+                  setSelectedOption('')
+                  setSelectedOptions([])
+                  setCustomText('')
+                }}
+                isSubmitting={isTyping}
+                compact={compact}
+                animationPhase={animationState.phase}
+                selectedOptionId={animationState.selectedOptionId}
+              />
+            )}
+          </AnimatePresence>
         )}
 
         {/* File Upload Question (Brand Materials) */}
@@ -592,10 +827,12 @@ export default function ConversationPage() {
         )}
 
         {/* Empty State - No question, no validation, no feature selection, not complete */}
+        {/* Only show if NOT in processing phase (ProcessingIndicator handles that) */}
         {!isValidationMode && 
          !isFeatureSelectionMode && 
          !currentQuestion && 
          !isTyping && 
+         animationState.phase !== 'processing' &&
          !orchestrationError &&
          completionPercentage < 100 && (
           <motion.div

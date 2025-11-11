@@ -31,5 +31,18 @@
   .space-grid-4 { @apply space-y-4; }
   .space-grid-6 { @apply space-y-6; }
   .space-grid-8 { @apply space-y-8; }
+  
+  /* Phase 6: Screen reader only content */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
 }
 

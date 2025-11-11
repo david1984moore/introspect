@@ -188,3 +188,58 @@ export interface ContextItem {
   category?: 'foundation' | 'business' | 'technical' | 'features' | 'design' | 'timeline'
 }
 
+// Enhanced Conversation State Manager v2 - Topic Closure Types
+export interface ConversationFact {
+  id: string
+  category: 'business' | 'technical' | 'timeline' | 'budget' | 'feature'
+  key: string
+  value: string
+  confidence: number
+  sourceQuestionId: string
+  extractedAt: Date
+}
+
+export interface ConversationContext {
+  facts: ConversationFact[]
+  coveredTopics: string[]
+  recentHistory: Array<{
+    questionId: string
+    questionText: string
+    answerText: string
+    timestamp: Date
+  }>
+}
+
+export interface CompressedPromptPayload {
+  systemContext: string
+  factSummary: string
+  recentExchanges: string
+  topicClosureSection: string  // NEW: Explicit "do not ask" list
+  recentTopicsSection: string  // NEW: Similarity guard
+  currentQuestion: string
+}
+
+export interface TopicMapping {
+  topic: string
+  displayName: string
+  requiredFacts: string[]
+  keywords: string[]
+  minFactsForClosure: number  // How many facts needed to mark topic as "covered"
+}
+
+// Animation System Types (Phase 1: Animation Infrastructure)
+export type AnimationPhase = 
+  | 'idle'           // User reading question
+  | 'optionSelected' // User clicked, option highlighted
+  | 'questionExit'   // Current question fading out
+  | 'processing'     // Showing processing indicator
+  | 'questionEnter'  // Next question appearing
+  | 'ready'          // Entrance complete, ready for interaction
+
+export interface AnimationState {
+  phase: AnimationPhase
+  selectedOptionId: string | null
+  processingStartTime: number | null
+  newQuestionData: any | null
+}
+

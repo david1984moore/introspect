@@ -18,11 +18,12 @@ import type {
   ValidationOutcome,
 } from '@/types'
 import type { BusinessModel } from '@/types/business-models'
-import type { ScopeProgress, ClaudeResponse, Question } from '@/types/conversation'
+import type { ScopeProgress, ClaudeResponse, Question, ConversationFact } from '@/types/conversation'
 import { progressCalculator, convertToConversationIntelligence } from '@/lib/utils/progressCalculator'
 import type { ScopeDocument, ClientSummary } from '@/types/scope'
 import type { ValidationResult } from '@/lib/scope/documentValidator'
 import type { EmailDelivery } from '@/types/email'
+import { ConversationStateManager } from '@/lib/conversationStateManager'
 
 interface ConversationState {
   // Session Management
@@ -157,6 +158,19 @@ interface ConversationState {
   
   completeConversation: () => Promise<void>
   retryEmailDelivery: (recipientType: 'client' | 'david') => Promise<void>
+  
+  // Enhanced Conversation State Manager v2 - Topic Closure
+  conversationFacts: ConversationFact[]
+  coveredTopics: string[]
+  recentQuestionTopics: string[]
+  
+  // Actions - Topic Closure
+  extractFacts: (questionId: string, questionText: string, answerText: string, questionMetadata: { category: string; scopeSection?: string }) => ConversationFact[]
+  getAllFacts: () => ConversationFact[]
+  getRecentFacts: (count?: number) => ConversationFact[] // Phase 3: Get recent facts for ProcessingIndicator
+  getCompressionMetrics: () => { factCount: number; factTokens: number; recentContextTokens: number; topicClosureTokens: number; totalTokens: number; questionNumber: number; coveredTopicCount: number } // Phase 3: Compression metrics
+  getCoveredTopics: () => string[]
+  getStateManagerPayload: () => ReturnType<ConversationStateManager['generateCompressedPayload']> | null
 }
 
 // Enhanced input validation with prompt injection detection
@@ -194,6 +208,32 @@ const validateInput = (input: string): string => {
   }
   
   return sanitized
+}
+
+/**
+ * Helper function to get or create ConversationStateManager instance from store state
+ * This ensures we always have a fresh instance with the latest state
+ */
+function getStateManagerInstance(state: ConversationState): ConversationStateManager {
+  const manager = new ConversationStateManager()
+  
+  // Import state if it exists
+  if (state.conversationFacts.length > 0 || state.coveredTopics.length > 0) {
+    manager.importState({
+      facts: state.conversationFacts,
+      history: state.messages
+        .filter(msg => msg.role === 'user' && msg.metadata?.questionText)
+        .map((msg, index) => ({
+          question: msg.metadata?.questionText || '',
+          answer: msg.content,
+          timestamp: msg.timestamp || new Date(),
+        })),
+      coveredTopics: state.coveredTopics,
+      recentQuestionTopics: state.recentQuestionTopics,
+    })
+  }
+  
+  return manager
 }
 
 export const useConversationStore = create<ConversationState>()(
@@ -293,6 +333,11 @@ export const useConversationStore = create<ConversationState>()(
       completionError: null,
       isComplete: false,
       
+      // Enhanced Conversation State Manager v2 - Topic Closure state
+      conversationFacts: [],
+      coveredTopics: [],
+      recentQuestionTopics: [],
+      
       // Helper function to calculate completion percentage based on completed sections
       calculateCompletionFromSections: () => {
         const state = get()
@@ -321,6 +366,57 @@ export const useConversationStore = create<ConversationState>()(
         const state = get()
         let updatedProgress = state.scopeProgress
         
+        // Extract facts from foundational answers
+        const stateManager = getStateManagerInstance(state)
+        const newFacts: ConversationFact[] = []
+        
+        // Extract name fact
+        if (sanitized.userName) {
+          const nameFact = stateManager.extractFacts(
+            'foundation_name',
+            'What\'s your name?',
+            sanitized.userName,
+            { category: 'foundation' }
+          )
+          newFacts.push(...nameFact)
+        }
+        
+        // Extract email fact
+        if (sanitized.userEmail) {
+          const emailFact = stateManager.extractFacts(
+            'foundation_email',
+            'What\'s your email?',
+            sanitized.userEmail,
+            { category: 'foundation' }
+          )
+          newFacts.push(...emailFact)
+        }
+        
+        // Extract phone fact (if provided)
+        if (sanitized.userPhone) {
+          const phoneFact = stateManager.extractFacts(
+            'foundation_phone',
+            'Phone number?',
+            sanitized.userPhone,
+            { category: 'foundation' }
+          )
+          newFacts.push(...phoneFact)
+        }
+        
+        // Extract website type fact
+        if (sanitized.websiteType) {
+          const websiteTypeFact = stateManager.extractFacts(
+            'foundation_website_type',
+            'What kind of website are we building?',
+            sanitized.websiteType,
+            { category: 'foundation' }
+          )
+          newFacts.push(...websiteTypeFact)
+        }
+        
+        // Update state manager with new facts
+        const updatedState = stateManager.exportState()
+        
         if (hasAllFoundationData) {
           // Initialize SCOPE.md sections 2 and 3 as complete (foundation data)
           updatedProgress = {
@@ -348,12 +444,18 @@ export const useConversationStore = create<ConversationState>()(
               overallCompleteness: Math.round((completedSections / 14) * 100),
             },
             completionPercentage: Math.round((completedSections / 14) * 100),
+            conversationFacts: updatedState.facts,
+            coveredTopics: updatedState.coveredTopics,
+            recentQuestionTopics: updatedState.recentQuestionTopics,
           })
         } else {
           // Partial data - don't mark sections complete yet
           set({
             ...sanitized,
             lastActivity: new Date(),
+            conversationFacts: updatedState.facts,
+            coveredTopics: updatedState.coveredTopics,
+            recentQuestionTopics: updatedState.recentQuestionTopics,
           })
         }
         
@@ -704,6 +806,10 @@ export const useConversationStore = create<ConversationState>()(
           lastActivity: new Date(),
           ipAddress: null,
           suspiciousActivityCount: 0,
+          // Enhanced Conversation State Manager v2 - Reset facts
+          conversationFacts: [],
+          coveredTopics: [],
+          recentQuestionTopics: [],
         })
       },
       
@@ -719,6 +825,7 @@ export const useConversationStore = create<ConversationState>()(
         set({ isTyping: true, orchestrationError: null })
         
         try {
+          const apiCallStart = performance.now()
           const response = await fetch('/api/claude/orchestrate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -737,6 +844,8 @@ export const useConversationStore = create<ConversationState>()(
                 id: state.currentQuestion.id,
                 text: state.currentQuestion.text,
               } : null,
+              // Enhanced Conversation State Manager v2 - Topic Closure data
+              topicClosure: state.getStateManagerPayload(),
             }),
           })
           
@@ -751,6 +860,8 @@ export const useConversationStore = create<ConversationState>()(
           }
           
           const claudeResponse: ClaudeResponse = await response.json()
+          const apiCallEnd = performance.now()
+          console.log(`[Performance] API call took ${(apiCallEnd - apiCallStart).toFixed(2)}ms`)
           
           // Update SCOPE.md progress based on actual section status
           if (claudeResponse.progress) {
@@ -842,7 +953,7 @@ export const useConversationStore = create<ConversationState>()(
           }
           
           // Handle feature recommendations
-          if (claudeResponse.action === 'recommend_features' && claudeResponse.content.features) {
+          if (claudeResponse.action === 'recommend_features' && claudeResponse.content?.features) {
             const featuresData = claudeResponse.content.features
             const pkg = featuresData.package
             
@@ -886,7 +997,7 @@ export const useConversationStore = create<ConversationState>()(
           }
           
           // Phase 8: Handle validation action
-          else if (claudeResponse.action === 'validate_understanding' && claudeResponse.content.summary) {
+          else if (claudeResponse.action === 'validate_understanding' && claudeResponse.content?.summary) {
             // Create validation prompt from Claude's response
             // Note: In production, Claude would return a structured ValidationPrompt
             // For now, we'll create a basic one from the summary
@@ -894,7 +1005,7 @@ export const useConversationStore = create<ConversationState>()(
               id: `validation_${Date.now()}`,
               type: 'understanding',
               category: claudeResponse.sufficiency_evaluation?.scope_section || 'general',
-              summary: claudeResponse.content.summary,
+              summary: claudeResponse.content?.summary || '',
               allowEdit: true
             }
             
@@ -908,7 +1019,7 @@ export const useConversationStore = create<ConversationState>()(
           }
           
           // Handle question action
-          else if (claudeResponse.action === 'ask_question' && claudeResponse.content.question) {
+          else if (claudeResponse.action === 'ask_question' && claudeResponse.content?.question) {
             const question = claudeResponse.content.question
             
             // DO NOT add question text as a message - questions are displayed in currentQuestion box only
@@ -919,6 +1030,9 @@ export const useConversationStore = create<ConversationState>()(
               get().updateIntelligence(claudeResponse.intelligence)
             }
             
+            // OPTIMIZATION: Set question and clear loading state immediately for instant UI update
+            // Use requestAnimationFrame to ensure React renders before any other work
+            const renderStart = performance.now()
             set({
               currentQuestion: question,
               currentQuestionId: question.id,
@@ -927,6 +1041,18 @@ export const useConversationStore = create<ConversationState>()(
               isTyping: false,
               orchestrationError: null, // Clear any errors
             })
+            
+            // Force immediate render by using requestAnimationFrame (runs before next paint)
+            // This ensures the question appears before updateProgress() runs
+            requestAnimationFrame(() => {
+              const progressStart = performance.now()
+              get().updateProgress()
+              const progressEnd = performance.now()
+              console.log(`[Performance] updateProgress took ${(progressEnd - progressStart).toFixed(2)}ms`)
+            })
+            
+            const renderEnd = performance.now()
+            console.log(`[Performance] Question set in ${(renderEnd - renderStart).toFixed(2)}ms`)
           }
           
           // Handle completion
@@ -972,7 +1098,11 @@ export const useConversationStore = create<ConversationState>()(
           // sections can be promoted from 'in_progress' to 'complete' if calculator says so
           // This ensures that even if Claude marks a section as 'in_progress', 
           // the calculator can promote it to 'complete' if enough data has been gathered
-          get().updateProgress()
+          // NOTE: For 'ask_question' action, updateProgress() is deferred above to allow immediate question rendering
+          // For other actions (complete, recommend_features, validate_understanding), call it synchronously
+          if (claudeResponse.action !== 'ask_question') {
+            get().updateProgress()
+          }
           
           // Clear any previous errors on success
           set({ orchestrationError: null })
@@ -992,12 +1122,73 @@ export const useConversationStore = create<ConversationState>()(
         }
       },
       
+      /**
+       * Submit answer and trigger next question
+       * 
+       * Phase 3 Animation Integration:
+       * 1. Fact extraction happens SYNCHRONOUSLY (before API call)
+       * 2. Facts are immediately available for ProcessingIndicator
+       * 3. Animation controller handles visual transitions (managed in UI layer)
+       * 4. API call happens during 'processing' animation phase
+       * 
+       * Flow: User selects → Animation starts → Facts extracted → API called → New question → Animation completes
+       */
       submitAnswer: async (answer, questionId) => {
+        const submitStart = performance.now()
         const state = get()
         const sanitized = validateInput(answer)
         
         // Get the question that was answered before clearing it
         const answeredQuestion = state.currentQuestion
+        
+        // OPTIMIZATION #1: Clear question immediately and show loading state for instant feedback
+        set({ 
+          currentQuestion: null, 
+          currentQuestionId: null,
+          isTyping: true  // Show loading state immediately
+        })
+        
+        // Phase 3: Enhanced Conversation State Manager v2: Extract facts from answer
+        // CRITICAL: Fact extraction happens SYNCHRONOUSLY before API call
+        // This ensures facts are available immediately for ProcessingIndicator animation
+        const factExtractionStart = performance.now()
+        if (answeredQuestion) {
+          const currentState = get()
+          const stateManager = getStateManagerInstance(currentState)
+          
+          // Extract facts (this also updates covered topics internally)
+          const newFacts = stateManager.extractFacts(
+            questionId,
+            answeredQuestion.text,
+            sanitized,
+            {
+              category: answeredQuestion.category || 'business_context',
+              scopeSection: answeredQuestion.scope_section,
+            }
+          )
+          
+          // Add to history for topic tracking
+          stateManager.addToHistory(answeredQuestion.text, sanitized)
+          
+          // Update store with all changes (facts + history + covered topics)
+          const updatedState = stateManager.exportState()
+          set({
+            conversationFacts: updatedState.facts,
+            coveredTopics: updatedState.coveredTopics,
+            recentQuestionTopics: updatedState.recentQuestionTopics,
+          })
+          
+          // Log metrics for monitoring
+          const metrics = stateManager.getTokenMetrics()
+          const factExtractionEnd = performance.now()
+          console.log(`[Topic Closure] Question ${metrics.questionNumber}:`, {
+            factsExtracted: newFacts.length,
+            totalFacts: metrics.factCount,
+            coveredTopics: metrics.coveredTopicCount,
+            tokens: metrics.totalTokens,
+            extractionTime: `${(factExtractionEnd - factExtractionStart).toFixed(2)}ms`,
+          })
+        }
         
         // Add user message with question context so Claude knows what was answered
         get().addMessage({
@@ -1013,11 +1204,13 @@ export const useConversationStore = create<ConversationState>()(
         // Update intelligence based on answer
         // This will be enhanced as we gather more context
         
-        // Clear current question
-        set({ currentQuestion: null, currentQuestionId: null })
-        
-        // Trigger next orchestration
+        const apiStart = performance.now()
+        // Trigger next orchestration (already sets isTyping: true, but we did it early for instant feedback)
         await get().orchestrateNext()
+        const apiEnd = performance.now()
+        
+        const submitEnd = performance.now()
+        console.log(`[Performance] Total submitAnswer: ${(submitEnd - submitStart).toFixed(2)}ms (API: ${(apiEnd - apiStart).toFixed(2)}ms)`)
         
         // Note: updateProgress() is now called at the end of orchestrateNext()
         // to ensure sections are re-evaluated after Claude's response
@@ -1537,6 +1730,57 @@ export const useConversationStore = create<ConversationState>()(
           throw error
         }
       },
+      
+      // Enhanced Conversation State Manager v2 - Topic Closure Actions
+      extractFacts: (questionId, questionText, answerText, questionMetadata) => {
+        const state = get()
+        const stateManager = getStateManagerInstance(state)
+        
+        // Extract facts
+        const newFacts = stateManager.extractFacts(
+          questionId,
+          questionText,
+          answerText,
+          questionMetadata
+        )
+        
+        // Update store with new state
+        const updatedState = stateManager.exportState()
+        set({
+          conversationFacts: updatedState.facts,
+          coveredTopics: updatedState.coveredTopics,
+          recentQuestionTopics: updatedState.recentQuestionTopics,
+        })
+        
+        return newFacts
+      },
+      
+      getAllFacts: () => {
+        return get().conversationFacts
+      },
+      
+      // Phase 3: Get recent facts for ProcessingIndicator display
+      getRecentFacts: (count: number = 3) => {
+        const facts = get().conversationFacts
+        return facts.slice(-count)
+      },
+      
+      // Phase 3: Get compression metrics for performance monitoring
+      getCompressionMetrics: () => {
+        const state = get()
+        const stateManager = getStateManagerInstance(state)
+        return stateManager.getTokenMetrics()
+      },
+      
+      getCoveredTopics: () => {
+        return get().coveredTopics
+      },
+      
+      getStateManagerPayload: () => {
+        const state = get()
+        const stateManager = getStateManagerInstance(state)
+        return stateManager.generateCompressedPayload()
+      },
     }),
     {
       name: 'introspect-v3-conversation',
@@ -1568,6 +1812,10 @@ export const useConversationStore = create<ConversationState>()(
         validationLoops: state.validationLoops,
         completionPercentage: state.completionPercentage,
         categoryProgress: state.categoryProgress,
+        // Enhanced Conversation State Manager v2 - Persist facts
+        conversationFacts: state.conversationFacts,
+        coveredTopics: state.coveredTopics,
+        recentQuestionTopics: state.recentQuestionTopics,
       }),
     }
   )
