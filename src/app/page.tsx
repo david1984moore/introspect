@@ -1,11 +1,21 @@
 'use client'
 
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Brain, Sparkles, Clock } from 'lucide-react'
 import Link from 'next/link'
 
 export default function LandingPage() {
+  // Clear reset flag when landing page loads (cleanup from Start Over)
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('introspect-resetting')
+    } catch (error) {
+      // Ignore errors (sessionStorage might not be available in some environments)
+    }
+  }, [])
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Hero Section - 70% whitespace principle */}

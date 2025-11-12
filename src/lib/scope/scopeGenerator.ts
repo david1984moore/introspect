@@ -354,7 +354,7 @@ export class ScopeGenerator {
     return {
       contentProvider: (intelligence.contentProvider as 'client' | 'applicreations' | 'mixed') || 'mixed',
       contentReadiness: (intelligence.contentReadiness as 'ready' | 'in_progress' | 'needs_creation') || 'needs_creation',
-      updateFrequency: (intelligence.contentUpdateFrequency as 'daily' | 'weekly' | 'monthly' | 'rarely') || 'monthly',
+      updateFrequency: (intelligence.contentUpdateFrequency as 'daily' | 'weekly' | 'monthly' | 'few_months' | 'rarely') || 'monthly',
       maintenancePlan: this.generateMaintenancePlan(intelligence),
       contentTypes: intelligence.contentTypes || ['text', 'images'],
       copywritingNeeded: intelligence.needsCopywriting ?? true,

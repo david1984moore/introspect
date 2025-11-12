@@ -19,7 +19,7 @@ import type {
 } from '@/types'
 import type { BusinessModel } from '@/types/business-models'
 import type { ScopeProgress, ClaudeResponse, Question, ConversationFact } from '@/types/conversation'
-import { progressCalculator, convertToConversationIntelligence } from '@/lib/utils/progressCalculator'
+import { progressCalculator, convertToConversationIntelligence, calculateProgressByQuestionCount } from '@/lib/utils/progressCalculator'
 import type { ScopeDocument, ClientSummary } from '@/types/scope'
 import type { ValidationResult } from '@/lib/scope/documentValidator'
 import type { EmailDelivery } from '@/types/email'
@@ -78,6 +78,11 @@ interface ConversationState {
   showingFeatureSelection: boolean
   packageTier: 'Starter' | 'Professional' | 'Custom' // Phase 6: Package tier for feature pricing
   
+  // Package Selection (Website + Hosting)
+  showingPackageSelection: boolean
+  selectedWebsitePackage: 'starter' | 'professional' | 'custom' | null
+  selectedHostingPackage: 'basic' | 'pro' | 'premium' | 'none'
+  
   // Phase 8: Validation & Confirmation
   currentValidation: ValidationPrompt | null
   validationHistory: ValidationOutcome[]
@@ -126,6 +131,7 @@ interface ConversationState {
   updateScopeProgress: (progress: Partial<ScopeProgress>) => void
   submitFeatureSelection: (selectedFeatureIds: string[]) => Promise<void>
   calculatePackageTier: () => 'Starter' | 'Professional' | 'Custom' // Phase 6: Calculate package tier
+  submitPackageSelection: (websitePackage: 'starter' | 'professional' | 'custom', hostingPackage: 'basic' | 'pro' | 'premium' | 'none', hostingDuration?: 3 | 6 | 12) => Promise<void>
   
   // Phase 8: Validation Actions
   submitValidation: (response: ValidationResponse) => Promise<void>
@@ -310,6 +316,9 @@ export const useConversationStore = create<ConversationState>()(
       packageRecommendation: null,
       showingFeatureSelection: false,
       packageTier: 'Professional', // Default, calculated dynamically
+      showingPackageSelection: false,
+      selectedWebsitePackage: null,
+      selectedHostingPackage: 'none',
       currentValidation: null, // Phase 8: Current validation prompt
       validationHistory: [], // Phase 8: Validation outcomes history
       lastActivity: new Date(),
@@ -433,6 +442,9 @@ export const useConversationStore = create<ConversationState>()(
             (status) => status === 'complete'
           ).length
           
+          // Use question-based progress instead of section-based progress
+          const questionBasedProgress = calculateProgressByQuestionCount(state.questionCount, state.isComplete)
+          
           set({
             ...sanitized,
             currentCategory: 'business_context',
@@ -441,9 +453,17 @@ export const useConversationStore = create<ConversationState>()(
               ...updatedProgress,
               sectionsComplete: completedSections,
               sectionsRemaining: 14 - completedSections,
-              overallCompleteness: Math.round((completedSections / 14) * 100),
+              // Use question-based progress, but ensure it doesn't decrease
+              overallCompleteness: Math.max(
+                state.scopeProgress.overallCompleteness,
+                questionBasedProgress
+              ),
             },
-            completionPercentage: Math.round((completedSections / 14) * 100),
+            // Use question-based progress for completion percentage
+            completionPercentage: Math.max(
+              state.completionPercentage,
+              questionBasedProgress
+            ),
             conversationFacts: updatedState.facts,
             coveredTopics: updatedState.coveredTopics,
             recentQuestionTopics: updatedState.recentQuestionTopics,
@@ -493,11 +513,12 @@ export const useConversationStore = create<ConversationState>()(
         
         set((state) => ({
           messages: [...state.messages, newMessage],
-          questionCount: message.role === 'assistant' && !message.metadata?.validationLoop
-            ? state.questionCount + 1 
-            : state.questionCount,
           lastActivity: new Date(),
         }))
+        
+        // NOTE: questionCount is ONLY incremented in orchestrateNext() when a new question arrives
+        // addMessage() is for conversation history only, not question tracking
+        // This prevents questionCount from being incremented incorrectly by assistant messages
         
         // Auto-sync every 5 messages
         if (get().messages.length % 5 === 0) {
@@ -801,6 +822,9 @@ export const useConversationStore = create<ConversationState>()(
           packageRecommendation: null,
           showingFeatureSelection: false,
           packageTier: 'Professional',
+          showingPackageSelection: false,
+          selectedWebsitePackage: null,
+          selectedHostingPackage: 'none',
           currentValidation: null, // Phase 8: Reset validation
           validationHistory: [], // Phase 8: Reset validation history
           lastActivity: new Date(),
@@ -846,8 +870,15 @@ export const useConversationStore = create<ConversationState>()(
               } : null,
               // Enhanced Conversation State Manager v2 - Topic Closure data
               topicClosure: state.getStateManagerPayload(),
+              // Package and feature selection state - CRITICAL: Prevents re-triggering selection screens
+              selectedWebsitePackage: state.selectedWebsitePackage,
+              selectedHostingPackage: state.selectedHostingPackage,
+              featureSelection: state.featureSelection,
             }),
           })
+          
+          let claudeResponse: ClaudeResponse
+          const apiCallEnd = performance.now()
           
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Unknown error', details: 'Failed to parse error response' }))
@@ -856,12 +887,94 @@ export const useConversationStore = create<ConversationState>()(
               statusText: response.statusText,
               error: errorData,
             })
-            throw new Error(errorData.details || errorData.error || `Orchestration failed: ${response.status} ${response.statusText}`)
+            
+            // CRITICAL FIX: If duplicate question was rejected, retry once automatically
+            if (response.status === 400 && errorData.action === 'reject_duplicate_question') {
+              console.warn('[Orchestration] Duplicate question rejected, retrying once to get a different question...')
+              // Retry orchestration once
+              const retryResponse = await fetch('/api/claude/orchestrate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  conversation: state.messages,
+                  intelligence: state.intelligence,
+                  websiteType: state.websiteType,
+                  questionCount: state.questionCount,
+                  foundation: {
+                    userName: state.userName,
+                    userEmail: state.userEmail,
+                    userPhone: state.userPhone,
+                    websiteType: state.websiteType,
+                  },
+                  currentQuestion: state.currentQuestion ? {
+                    id: state.currentQuestion.id,
+                    text: state.currentQuestion.text,
+                  } : null,
+                  topicClosure: state.getStateManagerPayload(),
+                  // Package and feature selection state - CRITICAL: Prevents re-triggering selection screens
+                  selectedWebsitePackage: state.selectedWebsitePackage,
+                  selectedHostingPackage: state.selectedHostingPackage,
+                  featureSelection: state.featureSelection,
+                }),
+              })
+              
+              if (!retryResponse.ok) {
+                // Retry also failed, throw error
+                const retryErrorData = await retryResponse.json().catch(() => ({ error: 'Unknown error', details: 'Failed to parse error response' }))
+                throw new Error(retryErrorData.details || retryErrorData.error || `Orchestration retry failed: ${retryResponse.status} ${retryResponse.statusText}`)
+              }
+              
+              // Use retry response
+              claudeResponse = await retryResponse.json()
+              console.log(`[Performance] Retry API call took ${(performance.now() - apiCallStart).toFixed(2)}ms`)
+            } 
+            // CRITICAL FIX: If security question was rejected, retry once automatically
+            else if (response.status === 400 && errorData.action === 'reject_security_question') {
+              console.warn('[Orchestration] Security question rejected, retrying once to get a different question...')
+              // Retry orchestration once
+              const retryResponse = await fetch('/api/claude/orchestrate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  conversation: state.messages,
+                  intelligence: state.intelligence,
+                  websiteType: state.websiteType,
+                  questionCount: state.questionCount,
+                  foundation: {
+                    userName: state.userName,
+                    userEmail: state.userEmail,
+                    userPhone: state.userPhone,
+                    websiteType: state.websiteType,
+                  },
+                  currentQuestion: state.currentQuestion ? {
+                    id: state.currentQuestion.id,
+                    text: state.currentQuestion.text,
+                  } : null,
+                  topicClosure: state.getStateManagerPayload(),
+                  // Package and feature selection state - CRITICAL: Prevents re-triggering selection screens
+                  selectedWebsitePackage: state.selectedWebsitePackage,
+                  selectedHostingPackage: state.selectedHostingPackage,
+                  featureSelection: state.featureSelection,
+                }),
+              })
+              
+              if (!retryResponse.ok) {
+                // Retry also failed, throw error
+                const retryErrorData = await retryResponse.json().catch(() => ({ error: 'Unknown error', details: 'Failed to parse error response' }))
+                throw new Error(retryErrorData.details || retryErrorData.error || `Orchestration retry failed: ${retryResponse.status} ${retryResponse.statusText}`)
+              }
+              
+              // Use retry response
+              claudeResponse = await retryResponse.json()
+              console.log(`[Performance] Retry API call took ${(performance.now() - apiCallStart).toFixed(2)}ms`)
+            } else {
+              throw new Error(errorData.details || errorData.error || `Orchestration failed: ${response.status} ${response.statusText}`)
+            }
+          } else {
+            // Normal response - parse it
+            claudeResponse = await response.json()
+            console.log(`[Performance] API call took ${(apiCallEnd - apiCallStart).toFixed(2)}ms`)
           }
-          
-          const claudeResponse: ClaudeResponse = await response.json()
-          const apiCallEnd = performance.now()
-          console.log(`[Performance] API call took ${(apiCallEnd - apiCallStart).toFixed(2)}ms`)
           
           // Update SCOPE.md progress based on actual section status
           if (claudeResponse.progress) {
@@ -899,27 +1012,33 @@ export const useConversationStore = create<ConversationState>()(
             
             // Mark sections as complete if Claude says they're complete
             // Only update if not already complete (preserve existing completed sections)
-            claudeResponse.progress.scope_sections_complete.forEach((sectionName: string) => {
-              const sectionKey = mapSectionName(sectionName)
-              if (sectionKey && sectionKey in updatedSections) {
-                // Only mark as complete if not already complete (preserve state)
-                if (updatedSections[sectionKey as keyof typeof updatedSections] !== 'complete') {
-                  updatedSections[sectionKey as keyof typeof updatedSections] = 'complete'
+            // CRITICAL: Add defensive check - ensure scope_sections_complete exists and is an array
+            if (Array.isArray(claudeResponse.progress.scope_sections_complete)) {
+              claudeResponse.progress.scope_sections_complete.forEach((sectionName: string) => {
+                const sectionKey = mapSectionName(sectionName)
+                if (sectionKey && sectionKey in updatedSections) {
+                  // Only mark as complete if not already complete (preserve state)
+                  if (updatedSections[sectionKey as keyof typeof updatedSections] !== 'complete') {
+                    updatedSections[sectionKey as keyof typeof updatedSections] = 'complete'
+                  }
                 }
-              }
-            })
+              })
+            }
             
             // Mark sections as in progress (only if not already complete or in progress)
-            claudeResponse.progress.scope_sections_in_progress.forEach((sectionName: string) => {
-              const sectionKey = mapSectionName(sectionName)
-              if (sectionKey && sectionKey in updatedSections) {
-                const currentStatus = updatedSections[sectionKey as keyof typeof updatedSections]
-                // Only mark as in_progress if currently not_started (don't downgrade from complete)
-                if (currentStatus === 'not_started') {
-                  updatedSections[sectionKey as keyof typeof updatedSections] = 'in_progress'
+            // CRITICAL: Add defensive check - ensure scope_sections_in_progress exists and is an array
+            if (Array.isArray(claudeResponse.progress.scope_sections_in_progress)) {
+              claudeResponse.progress.scope_sections_in_progress.forEach((sectionName: string) => {
+                const sectionKey = mapSectionName(sectionName)
+                if (sectionKey && sectionKey in updatedSections) {
+                  const currentStatus = updatedSections[sectionKey as keyof typeof updatedSections]
+                  // Only mark as in_progress if currently not_started (don't downgrade from complete)
+                  if (currentStatus === 'not_started') {
+                    updatedSections[sectionKey as keyof typeof updatedSections] = 'in_progress'
+                  }
                 }
-              }
-            })
+              })
+            }
             
             // Calculate actual completed sections from updated state
             const completedSections = Object.values(updatedSections).filter(
@@ -932,13 +1051,13 @@ export const useConversationStore = create<ConversationState>()(
               (status) => status === 'not_started'
             ).length
             
-            // Calculate completion percentage based on completed sections only
-            const newCompletionPercentage = Math.round((completedSections / 14) * 100)
+            // Calculate completion percentage based on question count (new algorithm)
+            const questionBasedProgress = calculateProgressByQuestionCount(state.questionCount, state.isComplete)
             
             // CRITICAL: Progress should NEVER decrease - use Math.max to ensure it only increases
-            // This is a safety net in case section counting is wrong
+            // Use question-based progress instead of section-based
             const currentCompletion = state.completionPercentage
-            const finalCompletionPercentage = Math.max(currentCompletion, newCompletionPercentage)
+            const finalCompletionPercentage = Math.max(currentCompletion, questionBasedProgress)
             
             set({
               scopeProgress: {
@@ -952,48 +1071,126 @@ export const useConversationStore = create<ConversationState>()(
             })
           }
           
-          // Handle feature recommendations
-          if (claudeResponse.action === 'recommend_features' && claudeResponse.content?.features) {
-            const featuresData = claudeResponse.content.features
-            const pkg = featuresData.package
-            
-            // Convert to FeatureRecommendation format
-            const featureRecs: FeatureRecommendation[] = (featuresData.recommended || []).map((f: any) => ({
-              id: f.id,
-              name: f.name,
-              description: f.description,
-              price: f.price,
-              reasoning: f.reasoning,
-              priority: f.priority === 'highly_recommended' ? 'highly_recommended' : 
-                       f.priority === 'recommended' ? 'highly_recommended' : 'nice_to_have',
-              roi: f.roi,
-            }))
-            
-            const packageRec: PackageRecommendation = {
-              package: pkg as 'starter' | 'professional' | 'custom',
-              rationale: `Based on your needs, we recommend the ${pkg} package.`,
-              basePrice: pkg === 'starter' ? 2500 : pkg === 'professional' ? 4500 : 6000,
-              included: featuresData.included || [],
+          // Handle package selection (comes BEFORE features)
+          // CRITICAL: Only show package selection if packages haven't been selected yet
+          if (claudeResponse.action === 'select_packages') {
+            const currentState = get()
+            // If packages are already selected, skip showing the screen and continue orchestration
+            if (currentState.selectedWebsitePackage !== null && currentState.selectedWebsitePackage !== undefined) {
+              console.warn('[Orchestration] select_packages action received but packages already selected. Skipping and continuing.')
+              // Reset isTyping before recursive call
+              set({ isTyping: false })
+              // Continue orchestration instead of showing package selection
+              await get().orchestrateNext()
+              return null
             }
             
-            // Add assistant message about features
+            // Add assistant message about packages
             get().addMessage({
               role: 'assistant',
-              content: `Based on your needs, I've prepared a selection of features for your ${state.websiteType} website. Please select the ones that fit your project.`,
+              content: `Based on your needs, let's select the website package and hosting plan that work best for you.`,
             })
             
             set({
-              featureRecommendations: featureRecs,
-              packageRecommendation: packageRec,
-              showingFeatureSelection: true,
-              packageTier: pkg === 'starter' ? 'Starter' : pkg === 'professional' ? 'Professional' : 'Custom',
+              showingPackageSelection: true,
               currentQuestion: null,
               isTyping: false,
               orchestrationError: null, // Clear any errors
             })
-            
-            // Present features in store
-            get().presentFeatures(featureRecs, packageRec)
+          }
+          
+          // Handle feature recommendations
+          // CRITICAL: Handle recommend_features action - must check action first, then handle with/without features
+          // CRITICAL: Only show feature selection if features haven't been selected yet
+          else if (claudeResponse.action === 'recommend_features') {
+            const currentState = get()
+            // If features are already selected, skip showing the screen and continue orchestration
+            if (currentState.featureSelection?.selectedFeatures && currentState.featureSelection.selectedFeatures.length > 0) {
+              console.warn('[Orchestration] recommend_features action received but features already selected. Skipping and continuing.')
+              // Reset isTyping before recursive call
+              set({ isTyping: false })
+              // Continue orchestration instead of showing feature selection
+              await get().orchestrateNext()
+              return null
+            }
+            // If content.features exists, use it; otherwise generate features from intelligence
+            if (claudeResponse.content?.features) {
+              const featuresData = claudeResponse.content.features
+              const pkg = featuresData.package
+              
+              // Convert to FeatureRecommendation format
+              const featureRecs: FeatureRecommendation[] = (featuresData.recommended || []).map((f: any) => ({
+                id: f.id,
+                name: f.name,
+                description: f.description,
+                price: f.price,
+                reasoning: f.reasoning,
+                priority: f.priority === 'highly_recommended' ? 'highly_recommended' : 
+                         f.priority === 'recommended' ? 'highly_recommended' : 'nice_to_have',
+                roi: f.roi,
+              }))
+              
+              const packageRec: PackageRecommendation = {
+                package: pkg as 'starter' | 'professional' | 'custom',
+                rationale: `Based on your needs, we recommend the ${pkg} package.`,
+                basePrice: pkg === 'starter' ? 2500 : pkg === 'professional' ? 4500 : 6000,
+                included: featuresData.included || [],
+              }
+              
+              // Add assistant message about features
+              get().addMessage({
+                role: 'assistant',
+                content: `Based on your needs, I've prepared a selection of features for your ${state.websiteType} website. Please select the ones that fit your project.`,
+              })
+              
+              set({
+                featureRecommendations: featureRecs,
+                packageRecommendation: packageRec,
+                showingFeatureSelection: true,
+                packageTier: pkg === 'starter' ? 'Starter' : pkg === 'professional' ? 'Professional' : 'Custom',
+                currentQuestion: null,
+                isTyping: false,
+                orchestrationError: null, // Clear any errors
+              })
+              
+              // Present features in store
+              get().presentFeatures(featureRecs, packageRec)
+            } else {
+              // Claude triggered recommend_features but didn't provide features structure
+              // This can happen when question count >= 15 and we force the trigger
+              // In this case, we'll still show the feature screen - features will be generated client-side
+              console.warn('[Orchestration] recommend_features action received but content.features is missing. Showing feature screen anyway.')
+              
+              // Determine package from intelligence
+              const intelligence = claudeResponse.intelligence || state.intelligence || {}
+              const websiteType = state.websiteType || 'business'
+              
+              // Default to professional package
+              const defaultPackage: 'starter' | 'professional' | 'custom' = 'professional'
+              
+              const packageRec: PackageRecommendation = {
+                package: defaultPackage,
+                rationale: `Based on your needs, we recommend the ${defaultPackage} package.`,
+                basePrice: defaultPackage === 'starter' ? 2500 : defaultPackage === 'professional' ? 4500 : 6000,
+                included: [],
+              }
+              
+              // Add assistant message about features
+              get().addMessage({
+                role: 'assistant',
+                content: `Based on your needs, I've prepared a selection of features for your ${websiteType} website. Please select the ones that fit your project.`,
+              })
+              
+              set({
+                featureRecommendations: [], // Will be populated by feature selection screen
+                packageRecommendation: packageRec,
+                showingFeatureSelection: true,
+                packageTier: defaultPackage === 'starter' ? 'Starter' : defaultPackage === 'professional' ? 'Professional' : 'Custom',
+                currentQuestion: null,
+                isTyping: false,
+                orchestrationError: null, // Clear any errors
+              })
+            }
           }
           
           // Phase 8: Handle validation action
@@ -1019,11 +1216,50 @@ export const useConversationStore = create<ConversationState>()(
           }
           
           // Handle question action
-          else if (claudeResponse.action === 'ask_question' && claudeResponse.content?.question) {
+          else if (claudeResponse.action === 'ask_question') {
+            // Validate that question exists
+            if (!claudeResponse.content?.question) {
+              console.error('[Orchestration] ask_question action received but question is missing:', claudeResponse)
+              set({
+                isTyping: false,
+                orchestrationError: 'Received ask_question action but question data is missing. Please try again.',
+                currentQuestion: null,
+                currentQuestionId: null,
+              })
+              return null
+            }
+            
             const question = claudeResponse.content.question
+            
+            // Validate question structure
+            if (!question.id || !question.text) {
+              console.error('[Orchestration] Question structure is invalid:', question)
+              set({
+                isTyping: false,
+                orchestrationError: 'Question structure is invalid. Please try again.',
+                currentQuestion: null,
+                currentQuestionId: null,
+              })
+              return null
+            }
             
             // DO NOT add question text as a message - questions are displayed in currentQuestion box only
             // Messages array is for conversation history, not for displaying questions
+            
+            // Increment question count when a new question arrives
+            // This represents "questions asked" to the user
+            // SAFEGUARD: Only increment if this is a new question (different ID)
+            const currentState = get()
+            const isDuplicateQuestion = currentState.currentQuestionId === question.id
+            const newQuestionCount = isDuplicateQuestion 
+              ? currentState.questionCount  // Don't increment for duplicate questions
+              : currentState.questionCount + 1
+            
+            if (!isDuplicateQuestion) {
+              console.log(`[Progress Debug] OrchestrateNext: NEW question detected, questionCount ${currentState.questionCount} -> ${newQuestionCount}, progress will be ${calculateProgressByQuestionCount(newQuestionCount, currentState.isComplete).toFixed(1)}%`)
+            } else {
+              console.warn(`[Progress Debug] OrchestrateNext: DUPLICATE question detected (ID: ${question.id}), NOT incrementing questionCount (staying at ${currentState.questionCount})`)
+            }
             
             // Update intelligence if provided
             if (claudeResponse.intelligence) {
@@ -1040,10 +1276,24 @@ export const useConversationStore = create<ConversationState>()(
               currentValidation: null, // Clear any validation when showing question
               isTyping: false,
               orchestrationError: null, // Clear any errors
+              questionCount: newQuestionCount,
             })
             
-            // Force immediate render by using requestAnimationFrame (runs before next paint)
-            // This ensures the question appears before updateProgress() runs
+            // Update progress immediately with new question count
+            // This is the single source of truth for progress updates when a new question arrives
+            const newProgress = calculateProgressByQuestionCount(newQuestionCount, currentState.isComplete)
+            const previousProgress = currentState.completionPercentage
+            console.log(`[Progress Debug] Updating progress: ${previousProgress.toFixed(1)}% -> ${newProgress.toFixed(1)}% (questionCount: ${newQuestionCount})`)
+            set((state) => ({
+              scopeProgress: {
+                ...state.scopeProgress,
+                overallCompleteness: Math.max(state.scopeProgress.overallCompleteness, newProgress),
+              },
+              completionPercentage: Math.max(state.completionPercentage, newProgress),
+            }))
+            
+            // Update section statuses in a separate frame to avoid blocking render
+            // This ensures the question appears immediately, then sections are updated
             requestAnimationFrame(() => {
               const progressStart = performance.now()
               get().updateProgress()
@@ -1085,11 +1335,13 @@ export const useConversationStore = create<ConversationState>()(
           // Handle unexpected action types
           else {
             console.error('Unexpected action from Claude:', claudeResponse.action)
+            console.error('Full response:', JSON.stringify(claudeResponse, null, 2))
             const errorMessage = `Unexpected response type: ${claudeResponse.action}. Please try refreshing.`
             set({
               isTyping: false,
               orchestrationError: errorMessage,
               currentQuestion: null,
+              currentQuestionId: null,
             })
             return null
           }
@@ -1099,7 +1351,7 @@ export const useConversationStore = create<ConversationState>()(
           // This ensures that even if Claude marks a section as 'in_progress', 
           // the calculator can promote it to 'complete' if enough data has been gathered
           // NOTE: For 'ask_question' action, updateProgress() is deferred above to allow immediate question rendering
-          // For other actions (complete, recommend_features, validate_understanding), call it synchronously
+          // For other actions (complete, select_packages, recommend_features, validate_understanding), call it synchronously
           if (claudeResponse.action !== 'ask_question') {
             get().updateProgress()
           }
@@ -1110,6 +1362,16 @@ export const useConversationStore = create<ConversationState>()(
           return claudeResponse
         } catch (error) {
           console.error('Orchestration error:', error)
+          console.error('Error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            state: {
+              questionCount: state.questionCount,
+              hasCurrentQuestion: !!state.currentQuestion,
+              isTyping: state.isTyping,
+              messagesCount: state.messages.length,
+            }
+          })
           const errorMessage = error instanceof Error 
             ? error.message 
             : 'Failed to load next question. Please try again.'
@@ -1117,6 +1379,7 @@ export const useConversationStore = create<ConversationState>()(
             isTyping: false,
             orchestrationError: errorMessage,
             currentQuestion: null,
+            currentQuestionId: null,
           })
           return null
         }
@@ -1201,6 +1464,10 @@ export const useConversationStore = create<ConversationState>()(
           },
         })
         
+        // NOTE: Progress update is handled in orchestrateNext() when the new question arrives
+        // This ensures progress is calculated based on the correct questionCount after incrementing
+        // Removing duplicate progress update here to prevent jumps
+        
         // Update intelligence based on answer
         // This will be enhanced as we gather more context
         
@@ -1243,87 +1510,184 @@ export const useConversationStore = create<ConversationState>()(
       submitFeatureSelection: async (selectedFeatureIds) => {
         const state = get()
         
-        // Phase 6: Use new feature library system
-        // Calculate package tier if not already set
-        const packageTier = state.packageTier || get().calculatePackageTier()
+        // Set loading state immediately
+        set({ isTyping: true, orchestrationError: null })
         
-        // Import feature library for pricing calculation
-        const { featureLibrary } = await import('@/lib/features/featureLibraryParser')
-        const pricing = featureLibrary.calculatePricing(selectedFeatureIds, packageTier)
+        try {
+          // Phase 6: Use new feature library system
+          // Calculate package tier if not already set
+          const packageTier = state.packageTier || get().calculatePackageTier()
+          
+          // Import feature library for pricing calculation
+          const { featureLibrary } = await import('@/lib/features/featureLibraryParser')
+          const pricing = featureLibrary.calculatePricing(selectedFeatureIds, packageTier)
+          
+          // Update feature selection with new pricing
+          const basePrice = packageTier === 'Starter' ? 2500 : 
+                           packageTier === 'Professional' ? 4500 : 6000
+          
+          get().selectFeatures(selectedFeatureIds)
+          
+          // Update feature selection with pricing
+          set({
+            featureSelection: {
+              package: packageTier.toLowerCase() as 'starter' | 'professional' | 'custom',
+              selectedFeatures: selectedFeatureIds,
+              totalPrice: basePrice + pricing.total,
+              monthlyHosting: packageTier === 'Starter' ? 75 : 
+                            packageTier === 'Professional' ? 150 : 300,
+              featuresPresented: true,
+              presentedAt: new Date(),
+            },
+            packageTier,
+          })
+          
+          // Add user message
+          get().addMessage({
+            role: 'user',
+            content: `Selected ${selectedFeatureIds.length} feature${selectedFeatureIds.length !== 1 ? 's' : ''}`,
+          })
+          
+          // Clear feature selection UI
+          set({
+            showingFeatureSelection: false,
+            featureRecommendations: null,
+            packageRecommendation: null,
+          })
+          
+          // Update SCOPE.md section 10 as complete
+          set((state) => {
+            const updatedSections = {
+              ...state.scopeProgress.sections,
+              section10_features_breakdown: 'complete',
+            }
+            
+            // Calculate actual completed sections
+            const completedSections = Object.values(updatedSections).filter(
+              (status) => status === 'complete'
+            ).length
+            const inProgressSections = Object.values(updatedSections).filter(
+              (status) => status === 'in_progress'
+            ).length
+            const notStartedSections = Object.values(updatedSections).filter(
+              (status) => status === 'not_started'
+            ).length
+            
+            const newCompletionPercentage = Math.round((completedSections / 14) * 100)
+            
+            // Use question-based progress instead of section-based
+            const questionBasedProgress = calculateProgressByQuestionCount(state.questionCount, state.isComplete)
+            
+            // CRITICAL: Progress should NEVER decrease
+            const finalCompletionPercentage = Math.max(
+              state.completionPercentage, 
+              Math.max(newCompletionPercentage, questionBasedProgress)
+            )
+            
+            return {
+              scopeProgress: {
+                sections: updatedSections,
+                overallCompleteness: finalCompletionPercentage,
+                sectionsComplete: completedSections,
+                sectionsInProgress: inProgressSections,
+                sectionsNotStarted: notStartedSections,
+              },
+              completionPercentage: finalCompletionPercentage,
+            }
+          })
+          
+          // Continue orchestration
+          await get().orchestrateNext()
+          
+          // Phase 7: Update progress after feature selection
+          get().updateProgress()
+        } catch (error) {
+          console.error('Feature selection submission error:', error)
+          set({
+            isTyping: false,
+            orchestrationError: error instanceof Error ? error.message : 'Failed to submit feature selection. Please try again.',
+          })
+        }
+      },
+      
+      // Package Selection Submission
+      submitPackageSelection: async (websitePackage, hostingPackage, hostingDuration = 3) => {
+        const state = get()
         
-        // Update feature selection with new pricing
-        const basePrice = packageTier === 'Starter' ? 2500 : 
-                         packageTier === 'Professional' ? 4500 : 6000
+        // Map website package to package tier
+        const packageTier = websitePackage === 'starter' ? 'Starter' :
+                           websitePackage === 'professional' ? 'Professional' : 'Custom'
         
-        get().selectFeatures(selectedFeatureIds)
+        // Calculate hosting monthly price with duration discounts
+        const hostingBasePrices: Record<'basic' | 'pro' | 'premium', number> = {
+          basic: 75,
+          pro: 150,
+          premium: 300
+        }
         
-        // Update feature selection with pricing
+        const durationDiscounts: Record<3 | 6 | 12, number> = {
+          3: 0,
+          6: 0.05, // 5% discount
+          12: 0.10 // 10% discount
+        }
+        
+        const discount = durationDiscounts[hostingDuration]
+        const basePrice = hostingPackage === 'none' ? 0 : hostingBasePrices[hostingPackage]
+        const monthlyHosting = Math.round(basePrice * (1 - discount))
+        
+        // Update state
         set({
-          featureSelection: {
-            package: packageTier.toLowerCase() as 'starter' | 'professional' | 'custom',
-            selectedFeatures: selectedFeatureIds,
-            totalPrice: basePrice + pricing.total,
-            monthlyHosting: packageTier === 'Starter' ? 75 : 
-                          packageTier === 'Professional' ? 150 : 300,
-            featuresPresented: true,
-            presentedAt: new Date(),
-          },
+          selectedWebsitePackage: websitePackage,
+          selectedHostingPackage: hostingPackage,
           packageTier,
+          showingPackageSelection: false,
+          // Update feature selection with package info
+          featureSelection: state.featureSelection ? {
+            ...state.featureSelection,
+            package: websitePackage,
+            monthlyHosting,
+          } : {
+            package: websitePackage,
+            selectedFeatures: [],
+            totalPrice: websitePackage === 'starter' ? 2500 : websitePackage === 'professional' ? 4500 : 0,
+            monthlyHosting,
+            featuresPresented: false,
+            presentedAt: null,
+          },
         })
         
         // Add user message
         get().addMessage({
           role: 'user',
-          content: `Selected ${selectedFeatureIds.length} feature${selectedFeatureIds.length !== 1 ? 's' : ''}`,
+          content: `Selected ${websitePackage} package${hostingPackage !== 'none' ? ` with ${hostingPackage} hosting (${hostingDuration} months)` : ''}`,
         })
         
-        // Clear feature selection UI
+        // Continue to feature selection
+        // After package selection, automatically trigger feature selection
+        const websiteType = state.websiteType || 'business'
+        
+        // Determine package from selected website package (packageTier already declared above)
+        
+        const packageRec: PackageRecommendation = {
+          package: websitePackage,
+          rationale: `Based on your needs, we recommend the ${websitePackage} package.`,
+          basePrice: websitePackage === 'starter' ? 2500 : websitePackage === 'professional' ? 4500 : 6000,
+          included: [],
+        }
+        
+        // Trigger feature selection immediately after package selection
         set({
-          showingFeatureSelection: false,
-          featureRecommendations: null,
-          packageRecommendation: null,
+          featureRecommendations: [], // Will be populated by feature selection screen
+          packageRecommendation: packageRec,
+          showingFeatureSelection: true,
+          packageTier,
+          currentQuestion: null,
+          isTyping: false,
+          orchestrationError: null,
         })
         
-        // Update SCOPE.md section 10 as complete
-        set((state) => {
-          const updatedSections = {
-            ...state.scopeProgress.sections,
-            section10_features_breakdown: 'complete',
-          }
-          
-          // Calculate actual completed sections
-          const completedSections = Object.values(updatedSections).filter(
-            (status) => status === 'complete'
-          ).length
-          const inProgressSections = Object.values(updatedSections).filter(
-            (status) => status === 'in_progress'
-          ).length
-          const notStartedSections = Object.values(updatedSections).filter(
-            (status) => status === 'not_started'
-          ).length
-          
-          const newCompletionPercentage = Math.round((completedSections / 14) * 100)
-          
-          // CRITICAL: Progress should NEVER decrease
-          const finalCompletionPercentage = Math.max(state.completionPercentage, newCompletionPercentage)
-          
-          return {
-            scopeProgress: {
-              sections: updatedSections,
-              overallCompleteness: finalCompletionPercentage,
-              sectionsComplete: completedSections,
-              sectionsInProgress: inProgressSections,
-              sectionsNotStarted: notStartedSections,
-            },
-            completionPercentage: finalCompletionPercentage,
-          }
-        })
-        
-        // Continue orchestration
+        // Continue orchestration (will show feature screen)
         await get().orchestrateNext()
-        
-        // Phase 7: Update progress after feature selection
-        get().updateProgress()
       },
       
       // Phase 8: Submit validation response
@@ -1413,11 +1777,19 @@ export const useConversationStore = create<ConversationState>()(
         await get().orchestrateNext()
       },
       
-      // Phase 7: Update progress based on current intelligence
+      // Phase 7: Update progress based on question count (new algorithm)
       updateProgress: () => {
         const state = get()
         
-        // Convert store state to ConversationIntelligence format
+        // Calculate progress based on question count using new algorithm
+        const newProgress = calculateProgressByQuestionCount(state.questionCount, state.isComplete)
+        
+        // CRITICAL: Progress should NEVER decrease
+        const finalProgress = Math.max(state.completionPercentage, newProgress)
+        console.log(`[Progress Debug] updateProgress: questionCount=${state.questionCount}, currentProgress=${state.completionPercentage.toFixed(1)}%, calculatedProgress=${newProgress.toFixed(1)}%, finalProgress=${finalProgress.toFixed(1)}%`)
+        
+        // Also update section-based progress for tracking purposes (but don't use it for overallCompleteness)
+        // Convert store state to ConversationIntelligence format for section tracking
         const conversationIntelligence = convertToConversationIntelligence(
           state.intelligence,
           {
@@ -1429,11 +1801,10 @@ export const useConversationStore = create<ConversationState>()(
           state.featureSelection?.selectedFeatures
         )
         
-        // Calculate progress using the calculator
+        // Calculate section progress for tracking (but not for overallCompleteness)
         const calculatedProgress = progressCalculator.calculateProgress(conversationIntelligence)
         
         // Update scopeProgress, preserving any sections already marked complete
-        // (to avoid downgrading sections that Claude marked as complete)
         const updatedSections = { ...state.scopeProgress.sections }
         
         // Only update sections if the new status is more complete than current
@@ -1446,10 +1817,9 @@ export const useConversationStore = create<ConversationState>()(
           } else if (currentStatus === 'in_progress' && newStatus === 'complete') {
             updatedSections[key as keyof typeof updatedSections] = newStatus
           }
-          // If currentStatus is already 'complete', keep it (don't downgrade)
         })
         
-        // Recalculate counts based on updated sections
+        // Recalculate counts based on updated sections (for display purposes)
         const sectionsComplete = Object.values(updatedSections).filter(
           status => status === 'complete'
         ).length
@@ -1460,22 +1830,17 @@ export const useConversationStore = create<ConversationState>()(
           status => status === 'not_started'
         ).length
         
-        const overallCompleteness = Math.round((sectionsComplete / 14) * 100)
-        
-        // CRITICAL: Progress should NEVER decrease
-        const finalCompletionPercentage = Math.max(state.completionPercentage, overallCompleteness)
-        
         set({
           scopeProgress: {
             sections: updatedSections,
-            overallCompleteness: finalCompletionPercentage,
+            overallCompleteness: finalProgress, // Use question-based progress
             sectionsComplete,
             sectionsInProgress,
             sectionsRemaining,
             currentSection: calculatedProgress.currentSection,
             estimatedQuestionsRemaining: calculatedProgress.estimatedQuestionsRemaining,
           },
-          completionPercentage: finalCompletionPercentage,
+          completionPercentage: finalProgress,
         })
       },
       
@@ -1670,7 +2035,13 @@ export const useConversationStore = create<ConversationState>()(
               david: emailDeliveries?.find((e: EmailDelivery) => e.recipientType === 'david')?.status === 'sent' ? 'sent' : 'failed'
             },
             isCompletingConversation: false,
-            isComplete: true
+            isComplete: true,
+            // Ensure progress is 100% when conversation completes
+            scopeProgress: {
+              ...get().scopeProgress,
+              overallCompleteness: 100,
+            },
+            completionPercentage: 100,
           })
           
         } catch (error) {

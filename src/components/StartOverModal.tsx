@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { useConversationStore } from '@/stores/conversationStore'
 import {
   Dialog,
@@ -12,7 +13,6 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-react'
 
 interface StartOverModalProps {
   open: boolean
@@ -39,6 +39,13 @@ export function StartOverModal({ open, onOpenChange }: StartOverModalProps) {
       // Close modal first
       onOpenChange(false)
       
+      // Set a flag to indicate we're resetting (prevents conversation page effects from running)
+      try {
+        sessionStorage.setItem('introspect-resetting', 'true')
+      } catch (error) {
+        console.error('Failed to set sessionStorage flag:', error)
+      }
+      
       // Clear persisted storage FIRST to prevent rehydration
       try {
         localStorage.removeItem('introspect-v3-conversation')
@@ -46,18 +53,17 @@ export function StartOverModal({ open, onOpenChange }: StartOverModalProps) {
         console.error('Failed to clear localStorage:', error)
       }
       
-      // Reset all state (this will also save empty state to localStorage via persist middleware)
+      // Redirect immediately BEFORE resetting state to prevent conversation page effects from running
+      // Using window.location.replace ensures we don't add to history and prevents back button issues
+      // The redirect happens synchronously, preventing any effects from reacting to state changes
+      window.location.replace('/')
+      
+      // Reset state after redirect (will complete in background but won't affect navigation)
       reset()
-      
-      // Small delay to ensure state operations complete
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // Force a full page reload to landing page to ensure clean state
-      window.location.href = '/'
     } catch (error) {
       console.error('Error during reset:', error)
       // Still try to redirect even if there's an error
-      window.location.href = '/'
+      window.location.replace('/')
     }
   }
 
@@ -65,32 +71,28 @@ export function StartOverModal({ open, onOpenChange }: StartOverModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogClose onClose={() => onOpenChange(false)} />
-        <DialogHeader>
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mt-0.5">
-              <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <DialogTitle>Start Over?</DialogTitle>
-              <DialogDescription>
-                This will permanently delete all your progress and start a fresh session.
-              </DialogDescription>
-            </div>
+        <DialogHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
+          <DialogDescription className="text-center text-base">
+            This will permanently delete all your progress and start a fresh session.
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
+          <Button
+            variant="destructive"
+            onClick={handleConfirm}
+            className="w-full"
+          >
+            Start Over
+          </Button>
           <Button
             ref={cancelButtonRef}
             variant="ghost"
             onClick={() => onOpenChange(false)}
           >
             Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-          >
-            Start Over
           </Button>
         </DialogFooter>
       </DialogContent>

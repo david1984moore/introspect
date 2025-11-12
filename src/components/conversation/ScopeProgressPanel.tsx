@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Info, Check } from 'lucide-react'
 import { ScopeProgressBar } from './ScopeProgressBar'
-import { ScopeSectionList } from './ScopeSectionList'
 import type { ScopeProgress } from '@/types/scopeProgress'
 import type { ConversationFact } from '@/types/conversation'
 
@@ -37,7 +36,7 @@ export function ScopeProgressPanel({
   }
   
   if (variant === 'compact') {
-    // Progress bar + collapsible section list
+    // Progress bar + collapsible answered questions list
     return (
       <div className={`bg-white rounded-lg border border-gray-200 p-4 ${className}`}>
         <div className="mb-4">
@@ -71,7 +70,9 @@ export function ScopeProgressPanel({
                     {answeredQuestions.length > 0 ? (
                       <AnsweredQuestionsList facts={answeredQuestions} />
                     ) : (
-                      <ScopeSectionList progress={progress} compact />
+                      <div className="text-xs text-gray-400 text-center py-4">
+                        No questions answered yet
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -83,7 +84,9 @@ export function ScopeProgressPanel({
             {answeredQuestions.length > 0 ? (
               <AnsweredQuestionsList facts={answeredQuestions} />
             ) : (
-              <ScopeSectionList progress={progress} compact />
+              <div className="text-xs text-gray-400 text-center py-4">
+                No questions answered yet
+              </div>
             )}
           </div>
         )}
@@ -109,7 +112,9 @@ export function ScopeProgressPanel({
       {answeredQuestions.length > 0 ? (
         <AnsweredQuestionsList facts={answeredQuestions} />
       ) : (
-        <ScopeSectionList progress={progress} />
+        <div className="text-xs text-gray-400 text-center py-4">
+          No questions answered yet
+        </div>
       )}
     </div>
   )

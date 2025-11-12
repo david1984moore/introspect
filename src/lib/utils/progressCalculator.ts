@@ -413,3 +413,65 @@ export class ProgressCalculator {
 
 export const progressCalculator = new ProgressCalculator()
 
+/**
+ * Calculate progress based on question count using the new algorithm:
+ * - First 10 questions: each fills 1/14 (≈7.14%) of progress
+ * - After 10 questions: each fills 6% of remaining progress
+ * - If only 1 more 6% increment can fit, stop showing progress until final question fills to 100%
+ * 
+ * @param questionCount - The number of questions answered so far
+ * @param isComplete - Whether the conversation is complete (final question answered)
+ * @returns Progress percentage (0-100)
+ */
+export function calculateProgressByQuestionCount(
+  questionCount: number,
+  isComplete: boolean = false
+): number {
+  // If conversation is complete, always return 100%
+  if (isComplete) {
+    return 100
+  }
+  
+  // First 10 questions: each fills 1/14 of progress (≈7.142857%)
+  const progressPerQuestionFirst10 = 100 / 14 // ≈7.142857%
+  
+  if (questionCount <= 10) {
+    return Math.min(100, questionCount * progressPerQuestionFirst10)
+  }
+  
+  // After 10 questions: calculate remaining progress and fill 6% of remaining each time
+  // After 10 questions, we've filled: 10 * (100/14) = 500/14 ≈ 71.428571%
+  const progressAfter10Questions = 10 * progressPerQuestionFirst10 // ≈71.428571%
+  const remainingProgress = 100 - progressAfter10Questions // ≈28.571429%
+  
+  // Calculate how many 6% increments can fit in the remaining progress
+  const questionsAfter10 = questionCount - 10
+  const incrementPercent = 6 // 6% of remaining progress
+  
+  // Calculate progress: start from progressAfter10Questions, then add increments
+  // Each increment fills 6% of the remaining progress
+  let currentProgress = progressAfter10Questions
+  
+  for (let i = 1; i <= questionsAfter10; i++) {
+    const remaining = 100 - currentProgress
+    
+    // If only 1 more 6% increment can fit before reaching 100%, stop showing progress
+    // Calculate what the next increment would be: 6% of remaining
+    const nextIncrement = remaining * (incrementPercent / 100)
+    const progressAfterNext = currentProgress + nextIncrement
+    
+    // If the next increment would bring us to 99% or more, stop here
+    // This ensures we leave room for the final question to fill to 100%
+    if (progressAfterNext >= 99 || remaining <= 6) {
+      // Don't add more progress - wait for final question
+      break
+    }
+    
+    // Add 6% of remaining progress
+    const increment = remaining * (incrementPercent / 100)
+    currentProgress += increment
+  }
+  
+  return Math.min(100, Math.round(currentProgress * 100) / 100)
+}
+

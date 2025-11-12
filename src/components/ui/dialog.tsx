@@ -18,14 +18,17 @@ interface DialogContentProps {
 
 interface DialogHeaderProps {
   children: React.ReactNode
+  className?: string
 }
 
 interface DialogTitleProps {
   children: React.ReactNode
+  className?: string
 }
 
 interface DialogDescriptionProps {
   children: React.ReactNode
+  className?: string
 }
 
 interface DialogFooterProps {
@@ -92,20 +95,20 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
 )
 DialogContent.displayName = 'DialogContent'
 
-const DialogHeader = ({ children }: DialogHeaderProps) => {
-  return <div className="mb-6 pr-8">{children}</div>
+const DialogHeader = ({ children, className = '' }: DialogHeaderProps) => {
+  return <div className={`mb-6 pt-2 ${className}`}>{children}</div>
 }
 
-const DialogTitle = ({ children }: DialogTitleProps) => {
-  return <h2 className="text-xl font-semibold text-gray-900 leading-tight">{children}</h2>
+const DialogTitle = ({ children, className = '' }: DialogTitleProps) => {
+  return <h2 className={`text-xl font-semibold text-gray-900 leading-tight ${className}`}>{children}</h2>
 }
 
-const DialogDescription = ({ children }: DialogDescriptionProps) => {
-  return <p className="text-sm text-gray-600 mt-2 leading-relaxed">{children}</p>
+const DialogDescription = ({ children, className = '' }: DialogDescriptionProps) => {
+  return <p className={`text-sm text-gray-600 mt-2 leading-relaxed ${className}`}>{children}</p>
 }
 
 const DialogFooter = ({ children }: DialogFooterProps) => {
-  return <div className="flex items-center justify-center gap-3 mt-6">{children}</div>
+  return <div className="flex flex-col items-center justify-center gap-3 mt-6">{children}</div>
 }
 
 const DialogClose = ({ onClose }: { onClose: () => void }) => {

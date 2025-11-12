@@ -11,15 +11,16 @@ import { Label } from '@/components/ui/label'
 import { Loader2, CheckCircle2, RotateCcw } from 'lucide-react'
 import { FeatureSelectionScreen } from '@/components/FeatureSelectionScreen'
 import { StartOverModal } from '@/components/StartOverModal'
-import { ContextSummary } from '@/components/conversation/ContextSummary'
 import { QuestionDisplay } from '@/components/conversation/QuestionDisplay'
 import { FeatureChipGrid } from '@/components/conversation/FeatureChipGrid'
+import { PackageSelectionScreen } from '@/components/conversation/PackageSelectionScreen'
 import { ValidationRouter } from '@/components/conversation/ValidationRouter'
 import { ScopeProgressPanel } from '@/components/conversation/ScopeProgressPanel'
 import { MobileProgressHeader } from '@/components/conversation/MobileProgressHeader'
 import { ProcessingIndicator } from '@/components/conversation/ProcessingIndicator'
 import { AmbientBackground } from '@/components/conversation/AmbientBackground'
 import { ConversationAnimationController } from '@/lib/conversationAnimationState'
+import { TIMINGS, EASINGS } from '@/lib/animationTimings'
 import { useContextDisplay } from '@/hooks/useContextDisplay'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { QuestionOption, ConversationIntelligence } from '@/types/conversation'
@@ -44,11 +45,15 @@ export default function ConversationPage() {
     intelligence,
     featureSelection,
     packageTier,
+    showingPackageSelection,
+    selectedWebsitePackage,
+    selectedHostingPackage,
     currentValidation, // Phase 8: Current validation prompt
     orchestrationError, // Error state from store
     orchestrateNext,
     submitAnswer,
     submitFeatureSelection,
+    submitPackageSelection,
     submitValidation, // Phase 8: Submit validation response
     calculatePackageTier,
     updateProgress,
@@ -93,6 +98,9 @@ export default function ConversationPage() {
   // Determine if we're in feature selection mode (Questions 10-12 or when showingFeatureSelection is true)
   const isFeatureSelectionMode = showingFeatureSelection
   
+  // Determine if we're in package selection mode
+  const isPackageSelectionMode = showingPackageSelection
+  
   // Phase 8: Determine if we're in validation mode
   const isValidationMode = currentValidation !== null
   
@@ -132,14 +140,31 @@ export default function ConversationPage() {
   ])
 
   // Redirect if no foundation data
+  // Skip redirect if we're in the middle of a reset (Start Over was clicked)
   useEffect(() => {
     if (!userName || !userEmail) {
-      router.push('/intake')
+      // Check if we're resetting (Start Over scenario)
+      const isResetting = typeof window !== 'undefined' && 
+        sessionStorage.getItem('introspect-resetting') === 'true'
+      
+      // Only redirect to /intake if we're NOT resetting
+      // If resetting, Start Over modal handles the redirect to landing page
+      if (!isResetting) {
+        router.push('/intake')
+      }
     }
   }, [userName, userEmail, router])
 
   // Initialize conversation on mount
   useEffect(() => {
+    // Skip initialization if we're resetting (Start Over scenario)
+    const isResetting = typeof window !== 'undefined' && 
+      sessionStorage.getItem('introspect-resetting') === 'true'
+    
+    if (isResetting) {
+      return // Don't initialize if we're resetting
+    }
+    
     if (!hasInitialized && userName && userEmail && !currentQuestion && !isTyping) {
       setHasInitialized(true)
       // Set animation phase to processing immediately to show ProcessingIndicator instead of old typing indicator
@@ -170,12 +195,11 @@ export default function ConversationPage() {
     }
   }, [userName, userEmail, currentQuestion, isTyping, animationState.phase, hasInitialized])
   
-  // Phase 7: Update progress when intelligence changes
-  useEffect(() => {
-    if (userName && userEmail) {
-      updateProgress()
-    }
-  }, [intelligence, featureSelection, userName, userEmail, updateProgress])
+  // NOTE: Progress updates are now handled in orchestrateNext() when new questions arrive
+  // Removing this useEffect to prevent duplicate progress updates that cause jumps
+  // Progress is updated:
+  // 1. When a new question arrives (in orchestrateNext)
+  // 2. When section statuses need updating (in updateProgress called from orchestrateNext)
 
   // Phase 3: Subscribe to animation state changes
   useEffect(() => {
@@ -251,8 +275,9 @@ export default function ConversationPage() {
         // 1. Processing phase (normal flow after exit) - MOST COMMON
         // 2. Idle/ready/questionEnter phases with previous question (normal transitions)
         // 3. FALLBACK: Any non-blocking phase if we have a previous question (safety net)
+        // CRITICAL FIX: Always trigger if we're in processing phase - this ensures we exit processing when question arrives
         const shouldTrigger = 
-          animationState.phase === 'processing' ||
+          animationState.phase === 'processing' || // CRITICAL: Always trigger in processing phase
           (['idle', 'ready', 'questionEnter'].includes(animationState.phase) && previousQuestionId !== null) ||
           (!isBlockingPhase && previousQuestionId !== null) // Fallback safety net
         
@@ -311,9 +336,81 @@ export default function ConversationPage() {
         })
         .catch((error) => {
           console.error('Failed to submit answer:', error)
+          // CRITICAL FIX: Reset animation phase on error to prevent getting stuck in 'processing'
+          animationController.current.setPhase('idle')
         })
     }
   }, [animationState.phase, submitAnswer])
+  
+  // CRITICAL FIX: Reset animation phase when orchestration error occurs
+  useEffect(() => {
+    if (orchestrationError) {
+      const currentPhase = animationController.current.getState().phase
+      // Only log and reset if we're not already in idle
+      if (currentPhase !== 'idle') {
+        console.error('[ConversationPage] Orchestration error detected, resetting animation phase from', currentPhase, 'to idle')
+        animationController.current.setPhase('idle')
+      }
+      // Also clear any pending answers since we're in an error state
+      pendingAnswerRef.current = null
+    }
+    // Only depend on orchestrationError - don't include animationState.phase to avoid loops
+  }, [orchestrationError])
+  
+  // CRITICAL FIX: Reset animation phase if stuck in processing for too long (timeout fallback)
+  useEffect(() => {
+    if (animationState.phase === 'processing' && animationState.processingStartTime) {
+      const processingDuration = Date.now() - animationState.processingStartTime
+      const maxProcessingTime = 30000 // 30 seconds timeout
+      
+      if (processingDuration > maxProcessingTime) {
+        console.warn(`[ConversationPage] Processing phase exceeded ${maxProcessingTime}ms, resetting to idle`)
+        animationController.current.setPhase('idle')
+        // If we're stuck and there's no error set, set an error to inform the user
+        if (!orchestrationError && !isTyping) {
+          useConversationStore.setState({ orchestrationError: 'Request timed out. Please try again.' })
+        }
+      }
+    }
+  }, [animationState.phase, animationState.processingStartTime, orchestrationError, isTyping])
+  
+  // CRITICAL FIX: Reset animation phase when orchestration completes but no question arrives
+  // This handles the case where orchestrateNext() completes but doesn't return a question
+  useEffect(() => {
+    if (animationState.phase === 'processing' && !isTyping && !currentQuestion && !orchestrationError) {
+      // Orchestration completed but no question arrived - might be completion or feature selection
+      // Wait a bit to see if question arrives, then reset if still stuck
+      const timeout = setTimeout(() => {
+        const currentState = useConversationStore.getState()
+        if (animationState.phase === 'processing' && !currentState.currentQuestion && !currentState.isTyping && !currentState.orchestrationError) {
+          console.warn('[ConversationPage] Orchestration completed but no question arrived, resetting animation phase and setting error')
+          animationController.current.setPhase('idle')
+          // Set an error to inform the user
+          useConversationStore.setState({ orchestrationError: 'No question was generated. Please try again.' })
+        }
+      }, 2000) // Give 2 seconds for question to arrive
+      
+      return () => clearTimeout(timeout)
+    }
+  }, [animationState.phase, isTyping, currentQuestion, orchestrationError])
+  
+  // CRITICAL FIX: Trigger animation when isTyping becomes false if we have a question waiting
+  // This handles the case where a question arrived while isTyping was true
+  useEffect(() => {
+    if (currentQuestion && !isTyping && animationState.phase === 'processing') {
+      const questionId = currentQuestion.id
+      const previousQuestionId = lastQuestionIdRef.current
+      const hasProcessedThisId = processedQuestionIdsRef.current.has(questionId)
+      
+      // If this is a new question that hasn't been processed yet, trigger animation
+      if (questionId !== previousQuestionId && !hasProcessedThisId) {
+        console.log('[ConversationPage] 🔄 isTyping became false, triggering animation for waiting question:', questionId)
+        processedQuestionIdsRef.current.add(questionId)
+        lastQuestionIdRef.current = questionId
+        animationController.current.setNewQuestion(currentQuestion)
+      }
+    }
+  }, [isTyping, currentQuestion, animationState.phase])
 
   const handleOptionSelect = (value: string) => {
     setSelectedOption(value)
@@ -343,6 +440,7 @@ export default function ConversationPage() {
 
     // Handle checkbox (multi-select) questions
     if (currentQuestion.inputType === 'checkbox') {
+      // Allow empty selection (will be handled by Skip button)
       if (selectedOptions.length === 0) return
       
       // If "other" is selected and has custom text, include it
@@ -352,6 +450,19 @@ export default function ConversationPage() {
       }
       
       answer = options.length > 0 ? options.join(', ') : ''
+      
+      // Checkbox questions don't trigger animations on submit - they fade when Continue/Skip is clicked
+      // Store answer for delayed submission after animation
+      pendingAnswerRef.current = {
+        value: answer,
+        questionId: currentQuestion.id
+      }
+      
+      // Trigger animation sequence (will transition to processing phase)
+      animationController.current.selectOption('checkbox_answer')
+      
+      // Don't submit immediately - wait for processing phase
+      return
     }
     // Handle radio (single-select) questions
     else if (currentQuestion.inputType === 'radio') {
@@ -405,13 +516,14 @@ export default function ConversationPage() {
       return true
     }
 
-    // Checkbox question (multi-select)
+    // Checkbox question (multi-select) - always enabled (can submit empty or skip)
     if (currentQuestion.inputType === 'checkbox') {
-      if (selectedOptions.length === 0) return false
+      // If "other" is selected, require custom text
       if (selectedOptions.includes('other')) {
         return customText.trim().length > 0
       }
-      return selectedOptions.length > 0
+      // Otherwise, can submit with any selection (including empty)
+      return true
     }
 
     // Radio button question (single-select)
@@ -428,8 +540,30 @@ export default function ConversationPage() {
 
   const handleSkip = async () => {
     if (!currentQuestion) return
-    await submitAnswer('No files uploaded', currentQuestion.id)
-    setUploadedFiles([])
+    
+    // For file upload questions
+    if (currentQuestion.inputType === 'file_upload') {
+      await submitAnswer('No files uploaded', currentQuestion.id)
+      setUploadedFiles([])
+    }
+    // For checkbox questions - submit empty answer with animation
+    else if (currentQuestion.inputType === 'checkbox') {
+      // Store answer for delayed submission after animation
+      pendingAnswerRef.current = {
+        value: 'None',
+        questionId: currentQuestion.id
+      }
+      
+      // Trigger animation sequence (will transition to processing phase)
+      animationController.current.selectOption('checkbox_skip')
+      
+      // Clear selections
+      setSelectedOptions([])
+      setCustomText('')
+      
+      // Don't submit immediately - wait for processing phase
+      return
+    }
   }
 
   return (
@@ -454,10 +588,19 @@ export default function ConversationPage() {
                 <h1 className="text-xl font-semibold text-gray-900">
                   Welcome back, {userName}
                 </h1>
-                <p className="text-sm text-gray-600">
-                  Let's build your {websiteType} website
-                </p>
+                {!isPackageSelectionMode && (
+                  <p className="text-sm text-gray-600">
+                    Let's build your {websiteType} website
+                  </p>
+                )}
               </div>
+              {isPackageSelectionMode && (
+                <div className="flex-1 flex justify-center">
+                  <h2 className="text-lg font-bold text-gray-900">
+                    Website & Hosting Package Selection
+                  </h2>
+                </div>
+              )}
               <div className="flex items-center gap-4">
                 <Button
                   variant="ghost"
@@ -493,8 +636,8 @@ export default function ConversationPage() {
 
         {/* Conversation Area */}
         <div className={isDesktop ? 'col-span-8' : 'max-w-3xl mx-auto'}>
-        {/* Phase 3: Processing Indicator */}
-        {animationState.phase === 'processing' && (
+        {/* Phase 3: Processing Indicator - Don't show during package selection */}
+        {animationState.phase === 'processing' && !isPackageSelectionMode && (
           <ProcessingIndicator
             compressedFacts={getAllFacts()}
             visible={true}
@@ -515,13 +658,25 @@ export default function ConversationPage() {
           />
         )}
 
+        {/* Package Selection Screen - Shows BEFORE features */}
+        {!isValidationMode && isPackageSelectionMode && (
+          <PackageSelectionScreen
+            onContinue={async (websitePackage, hostingPackage) => {
+              await submitPackageSelection(websitePackage, hostingPackage)
+            }}
+            isSubmitting={isTyping}
+          />
+        )}
+
         {/* Feature Selection Screen - Phase 6 FeatureChipGrid */}
-        {!isValidationMode && isFeatureSelectionMode && (
+        {!isValidationMode && !isPackageSelectionMode && isFeatureSelectionMode && (
           <FeatureChipGrid
             intelligence={conversationIntelligence}
             packageTier={currentPackageTier}
             onSubmit={submitFeatureSelection}
             isSubmitting={isTyping}
+            selectedWebsitePackage={selectedWebsitePackage}
+            selectedHostingPackage={selectedHostingPackage}
           />
         )}
 
@@ -536,16 +691,18 @@ export default function ConversationPage() {
         )}
 
         {/* Question Display - Use QuestionDisplay component for radio, text, and textarea */}
-        {/* Show during idle, optionSelected, questionExit, questionEnter, and ready phases */}
-        {/* Hide during processing phase (showing ProcessingIndicator instead) */}
-        {/* Use AnimatePresence to handle exit animations properly - component stays mounted during questionExit */}
-        {!isValidationMode && !isFeatureSelectionMode && 
+        {/* CRITICAL FIX: AnimatePresence needs component to stay mounted during questionExit phase */}
+        {/* QuestionDisplay handles its own visibility (shouldShow) - we just need to ensure it's rendered for AnimatePresence */}
+        {/* mode="wait" ensures exit animation completes before next question enters */}
+        {!isValidationMode && !isFeatureSelectionMode && !isPackageSelectionMode &&
          (currentQuestion?.inputType === 'radio' || 
           currentQuestion?.inputType === 'text' || 
           currentQuestion?.inputType === 'textarea') && (
-          <AnimatePresence mode="wait">
-            {currentQuestion && 
-             (animationState.phase !== 'processing') && (
+          <AnimatePresence mode="wait" initial={false}>
+            {/* CRITICAL FIX: Always render QuestionDisplay when we have a question */}
+            {/* Let QuestionDisplay handle visibility internally - it will hide during processing */}
+            {/* But stay mounted during questionExit so AnimatePresence can complete exit animation */}
+            {currentQuestion && (
               <QuestionDisplay
                 key={currentQuestion.id}
                 question={currentQuestion}
@@ -554,10 +711,13 @@ export default function ConversationPage() {
                 onAnswer={async (value: string) => {
                   console.log('[ConversationPage] onAnswer called:', value, 'question type:', currentQuestion?.inputType)
                   
-                  // For ALL question types, trigger animation sequence before submitting
+                  // For radio questions, trigger animation sequence before submitting
+                  // Only trigger fade animation for 2-option questions (immediate submission)
+                  // For >2-option questions, animation triggers when continue button is clicked
                   if (currentQuestion?.inputType === 'radio' && value) {
+                    const optionCount = currentQuestion.options?.length || 0
                     const option = currentQuestion.options?.find(o => o.value === value || o.label === value)
-                    console.log('[ConversationPage] Found option:', option?.value, 'for value:', value)
+                    console.log('[ConversationPage] Found option:', option?.value, 'for value:', value, 'option count:', optionCount)
                     if (option) {
                       // Store answer for delayed submission
                       pendingAnswerRef.current = {
@@ -565,12 +725,24 @@ export default function ConversationPage() {
                         questionId: currentQuestion.id
                       }
                       
-                      console.log('[ConversationPage] Calling selectOption with:', option.value)
-                      // Trigger animation sequence (will transition to processing phase)
-                      animationController.current.selectOption(option.value)
-                      
-                      // Don't submit immediately - wait for processing phase
-                      return
+                      // Only trigger animation for 2-option questions (immediate fade)
+                      // For >2-option questions, trigger animation when Continue button is clicked
+                      if (optionCount === 2) {
+                        console.log('[ConversationPage] Calling selectOption with:', option.value, '(2-option question, immediate fade)')
+                        // Trigger animation sequence (will transition to processing phase)
+                        animationController.current.selectOption(option.value)
+                        
+                        // Don't submit immediately - wait for processing phase
+                        return
+                      } else {
+                        // For >2-option questions, trigger animation NOW (Continue button was clicked)
+                        console.log('[ConversationPage] >2-option question - Continue clicked, triggering animation')
+                        // Trigger animation sequence (will transition to processing phase)
+                        animationController.current.selectOption(option.value)
+                        
+                        // Don't submit immediately - wait for processing phase
+                        return
+                      }
                     } else {
                       console.warn('[ConversationPage] Option not found for value:', value, 'available options:', currentQuestion.options?.map(o => o.value))
                     }
@@ -616,23 +788,14 @@ export default function ConversationPage() {
         {!isValidationMode && currentQuestion && 
          !isTyping && 
          !isFeatureSelectionMode && 
+         !isPackageSelectionMode &&
          isFileUploadQuestion && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm"
           >
-            {/* Context Summary */}
-            {showContext && (
-              <div className="mb-6">
-                <ContextSummary
-                  intelligence={conversationIntelligence}
-                  currentCategory={currentCategory || currentQuestion.category || ''}
-                  questionNumber={questionCount}
-                  compact={compact}
-                />
-              </div>
-            )}
+            {/* Context Summary removed - no longer displayed */}
 
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               {currentQuestion.text}
@@ -676,83 +839,111 @@ export default function ConversationPage() {
           </motion.div>
         )}
 
-        {/* Checkbox Options (Multi-select) - Keep inline for now */}
-        {!isValidationMode && currentQuestion && 
-         !isTyping && 
-         !isFeatureSelectionMode && 
-         currentQuestion.inputType === 'checkbox' && 
+        {/* Checkbox Options (Multi-select) - CRITICAL FIX: Wrap in AnimatePresence for fade animations */}
+        {/* CRITICAL FIX: AnimatePresence needs component to stay mounted during questionExit phase */}
+        {/* mode="wait" ensures exit animation completes before next question enters */}
+        {!isValidationMode && !isFeatureSelectionMode && !isPackageSelectionMode &&
+         currentQuestion?.inputType === 'checkbox' && 
          currentQuestion.options && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm"
-          >
-            {/* Context Summary for checkbox questions */}
-            {showContext && (
-              <div className="mb-6">
-                <ContextSummary
-                  intelligence={conversationIntelligence}
-                  currentCategory={currentCategory || currentQuestion.category || ''}
-                  questionNumber={questionCount}
-                  compact={compact}
-                />
-              </div>
-            )}
+          <AnimatePresence mode="wait" initial={false}>
+            {/* CRITICAL FIX: Show checkbox question during all phases except processing */}
+            {/* Must show during questionExit so AnimatePresence can complete exit animation */}
+            {currentQuestion && animationState.phase !== 'processing' && (
+              <motion.div
+                key={currentQuestion.id}
+                initial={{ opacity: 0, y: 40, scale: 0.96 }}
+                animate={
+                  animationState.phase === 'questionExit' 
+                    ? { opacity: 0, y: -40, scale: 0.96 }
+                    : { opacity: 1, y: 0, scale: 1 }
+                }
+                exit={{ opacity: 0, y: -40, scale: 0.96 }}
+                transition={{
+                  duration: animationState.phase === 'questionExit' 
+                    ? TIMINGS.QUESTION_FADE_DURATION / 1000  // Exit duration matches QUESTION_FADE_DURATION
+                    : TIMINGS.CONTAINER_FADE_IN / 1000,     // Entrance duration matches CONTAINER_FADE_IN
+                  ease: animationState.phase === 'questionExit' 
+                    ? EASINGS.OUT      // Ease out for exit
+                    : EASINGS.IN_OUT,  // Ease in-out for entrance
+                }}
+                style={{
+                  pointerEvents: animationState.phase === 'questionExit' ? 'none' : undefined,
+                }}
+                className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm"
+              >
+                {/* Context Summary removed - no longer displayed */}
 
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {currentQuestion.text}
-            </h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  {currentQuestion.text.toLowerCase().includes('tools') && currentQuestion.text.toLowerCase().includes('business')
+                    ? 'Do you have any tools that you want to integrate with your new website?'
+                    : currentQuestion.text}
+                </h2>
 
-            <div className="space-y-3 mb-6">
-              <p className="text-sm text-gray-500 mb-4">Choose all that apply</p>
-              {currentQuestion.options.map((option: QuestionOption) => (
-                <div key={option.value} className="flex items-center space-x-3">
-                  <Checkbox
-                    id={option.value}
-                    checked={selectedOptions.includes(option.value)}
-                    onCheckedChange={() => handleCheckboxToggle(option.value)}
-                  />
-                  <Label
-                    htmlFor={option.value}
-                    className="flex-1 cursor-pointer text-base font-normal"
-                  >
-                    {option.label}
-                  </Label>
+                <div className="space-y-3 mb-6">
+                  <p className="text-sm text-gray-500 mb-4">Choose all that apply</p>
+                  {currentQuestion.options.map((option: QuestionOption) => (
+                    <div key={option.value} className="flex items-center space-x-3">
+                      <Checkbox
+                        id={option.value}
+                        checked={selectedOptions.includes(option.value)}
+                        onCheckedChange={() => handleCheckboxToggle(option.value)}
+                        disabled={animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
+                      />
+                      <Label
+                        htmlFor={option.value}
+                        className="flex-1 cursor-pointer text-base font-normal"
+                      >
+                        {option.label}
+                      </Label>
+                    </div>
+                  ))}
+
+                  {/* Custom Text Input for "Something else" */}
+                  {selectedOptions.includes('other') && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="mt-4"
+                    >
+                      <Input
+                        placeholder="Please describe..."
+                        value={customText}
+                        onChange={(e) => setCustomText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && canSubmit()) {
+                            handleSubmit()
+                          }
+                        }}
+                        autoFocus
+                        disabled={animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
+                      />
+                    </motion.div>
+                  )}
+
                 </div>
-              ))}
 
-              {/* Custom Text Input for "Something else" */}
-              {selectedOptions.includes('other') && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="mt-4"
-                >
-                  <Input
-                    placeholder="Please describe..."
-                    value={customText}
-                    onChange={(e) => setCustomText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && canSubmit()) {
-                        handleSubmit()
-                      }
-                    }}
-                    autoFocus
-                  />
-                </motion.div>
-              )}
-
-            </div>
-
-            {/* Submit Button */}
-            <Button
-              onClick={handleSubmit}
-              disabled={!canSubmit()}
-              className="w-full"
-            >
-              Continue
-            </Button>
-          </motion.div>
+                {/* Submit Buttons */}
+                <div className="space-y-3">
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={!canSubmit() || animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
+                    className="w-full"
+                    size="lg"
+                  >
+                    Continue
+                  </Button>
+                  <Button
+                    onClick={handleSkip}
+                    disabled={isTyping || animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
+                    variant="ghost"
+                    className="w-full"
+                  >
+                    Skip
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
 
         {/* Completion State */}
@@ -804,7 +995,7 @@ export default function ConversationPage() {
         )}
 
         {/* Error State */}
-        {orchestrationError && !isTyping && (
+        {orchestrationError && !isTyping && !isPackageSelectionMode && !isFeatureSelectionMode && !isValidationMode && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -830,6 +1021,7 @@ export default function ConversationPage() {
         {/* Only show if NOT in processing phase (ProcessingIndicator handles that) */}
         {!isValidationMode && 
          !isFeatureSelectionMode && 
+         !isPackageSelectionMode &&
          !currentQuestion && 
          !isTyping && 
          animationState.phase !== 'processing' &&

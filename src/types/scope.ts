@@ -94,7 +94,7 @@ export interface BrandAssets {
 export interface ContentStrategy {
   contentProvider: 'client' | 'applicreations' | 'mixed'
   contentReadiness: 'ready' | 'in_progress' | 'needs_creation'
-  updateFrequency: 'daily' | 'weekly' | 'monthly' | 'rarely'
+  updateFrequency: 'daily' | 'weekly' | 'monthly' | 'few_months' | 'rarely'
   maintenancePlan: string
   contentTypes: string[]
   copywritingNeeded: boolean

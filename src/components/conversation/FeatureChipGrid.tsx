@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertCircle, CheckCircle2, Info } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { FeatureChip } from './FeatureChip'
 import { featureLibrary } from '@/lib/features/featureLibraryParser'
 import { recommendationEngine } from '@/lib/features/recommendationEngine'
@@ -14,13 +15,17 @@ interface FeatureChipGridProps {
   packageTier: string
   onSubmit: (selectedFeatureIds: string[]) => void
   isSubmitting?: boolean
+  selectedWebsitePackage?: 'starter' | 'professional' | 'custom' | null
+  selectedHostingPackage?: 'basic' | 'standard' | 'premium' | 'none'
 }
 
 export function FeatureChipGrid({
   intelligence,
   packageTier,
   onSubmit,
-  isSubmitting = false
+  isSubmitting = false,
+  selectedWebsitePackage = null,
+  selectedHostingPackage = 'none'
 }: FeatureChipGridProps) {
   // Get features filtered by website type
   const websiteType = intelligence.websiteType || 'website'
@@ -44,13 +49,35 @@ export function FeatureChipGrid({
   const [conflicts, setConflicts] = useState<FeatureConflict[]>([])
   const [dependencyIssues, setDependencyIssues] = useState<string[]>([])
   
-  // Calculate pricing
+  // Calculate pricing including package base price
   const pricing = useMemo(() => {
-    return featureLibrary.calculatePricing(
+    const featurePricing = featureLibrary.calculatePricing(
       Array.from(selectedFeatures),
       packageTier
     )
-  }, [selectedFeatures, packageTier])
+    
+    // Add package base price
+    const packageBasePrice = selectedWebsitePackage === 'starter' ? 2500 :
+                             selectedWebsitePackage === 'professional' ? 4500 :
+                             selectedWebsitePackage === 'custom' ? 6000 : 0
+    
+    // Add hosting annual cost
+    const hostingPrices: Record<'basic' | 'standard' | 'premium', number> = {
+      basic: 25,
+      standard: 50,
+      premium: 100
+    }
+    const hostingMonthly = selectedHostingPackage !== 'none' ? hostingPrices[selectedHostingPackage] : 0
+    const hostingAnnual = hostingMonthly * 12
+    
+    return {
+      ...featurePricing,
+      packageBasePrice,
+      hostingMonthly,
+      hostingAnnual,
+      total: packageBasePrice + featurePricing.total + hostingAnnual
+    }
+  }, [selectedFeatures, packageTier, selectedWebsitePackage, selectedHostingPackage])
   
   // Validate selection whenever it changes
   useEffect(() => {
@@ -138,7 +165,7 @@ export function FeatureChipGrid({
         </h2>
         <p className="text-gray-600 max-w-2xl mx-auto">
           Choose the features you need for your {websiteType} website. 
-          We've pre-selected recommended features based on your requirements.
+          All available features are shown below. Recommended features are pre-selected.
         </p>
       </div>
       
@@ -170,37 +197,42 @@ export function FeatureChipGrid({
             )}
           </div>
           
-          <button
+          <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className={`
-              px-8 py-3 rounded-lg font-medium transition-all
-              ${canSubmit
-                ? 'bg-primary text-white hover:opacity-90 shadow-sm'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
-            `}
+            size="lg"
           >
             {isSubmitting ? 'Submitting...' : 'Continue'}
-          </button>
+          </Button>
         </div>
         
         {/* Breakdown */}
-        {pricing.addonFeatures.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-200 text-sm">
+        <div className="mt-3 pt-3 border-t border-gray-200 text-sm space-y-1">
+          {pricing.packageBasePrice > 0 && (
+            <div className="flex justify-between text-gray-600">
+              <span>Website Package:</span>
+              <span>${pricing.packageBasePrice.toLocaleString()}</span>
+            </div>
+          )}
+          {pricing.addonFeatures.length > 0 && (
             <div className="flex justify-between text-gray-600">
               <span>Add-ons subtotal:</span>
               <span>${pricing.subtotal.toLocaleString()}</span>
             </div>
-            {pricing.bundleDiscount > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>Bundle discount:</span>
-                <span>-${pricing.bundleDiscount.toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          {pricing.bundleDiscount > 0 && (
+            <div className="flex justify-between text-green-600">
+              <span>Bundle discount:</span>
+              <span>-${pricing.bundleDiscount.toLocaleString()}</span>
+            </div>
+          )}
+          {pricing.hostingAnnual > 0 && (
+            <div className="flex justify-between text-gray-600">
+              <span>Hosting (Annual):</span>
+              <span>${pricing.hostingAnnual.toLocaleString()}</span>
+            </div>
+          )}
+        </div>
       </motion.div>
       
       {/* Validation alerts */}
@@ -297,20 +329,14 @@ export function FeatureChipGrid({
       
       {/* Bottom submit (for mobile scroll) */}
       <div className="mt-8 pb-8 flex justify-center">
-        <button
+        <Button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className={`
-            w-full sm:w-auto px-12 py-4 rounded-lg font-medium text-lg transition-all
-            ${canSubmit
-              ? 'bg-primary text-white hover:opacity-90 shadow-lg'
-              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
-          `}
+          className="w-full sm:w-auto"
+          size="lg"
         >
           {isSubmitting ? 'Submitting...' : `Continue with ${selectedFeatures.size} features`}
-        </button>
+        </Button>
       </div>
     </div>
   )

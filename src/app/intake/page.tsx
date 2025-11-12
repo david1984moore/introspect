@@ -14,6 +14,7 @@ import { StartOverModal } from '@/components/StartOverModal'
 import { ScopeProgressPanel } from '@/components/conversation/ScopeProgressPanel'
 import { MobileProgressHeader } from '@/components/conversation/MobileProgressHeader'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { calculateProgressByQuestionCount } from '@/lib/utils/progressCalculator'
 import type { FoundationData } from '@/types/conversation'
 
 // Validation schemas
@@ -37,11 +38,23 @@ const websiteTypes = [
 
 export default function FoundationForm() {
   const router = useRouter()
-  const { setFoundation, userName, userEmail, userPhone, websiteType, scopeProgress } = useConversationStore()
+  const { 
+    setFoundation, 
+    userName, 
+    userEmail, 
+    userPhone, 
+    websiteType, 
+    scopeProgress,
+    questionCount,
+    extractFacts,
+    updateProgress,
+    getAllFacts
+  } = useConversationStore()
   
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<Partial<FoundationFormData>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isExiting, setIsExiting] = useState(false) // Track exit animation state
   const phoneInputRef = useRef<HTMLInputElement>(null)
   const initializedRef = useRef(false)
   const [showStartOverModal, setShowStartOverModal] = useState(false)
@@ -130,32 +143,139 @@ export default function FoundationForm() {
     setErrors(newErrors)
     
     if (isValid) {
-      // Only save partial data to store, don't mark sections complete until all foundation data is done
-      // We'll update the store directly without calling setFoundation to avoid premature section completion
+      // Increment question count and extract facts for each foundational question
+      // This ensures foundational questions are counted and answers appear in Section Progress
       if (currentStep === 1 && formData.userName) {
-        // Just update userName in store without marking sections complete
-        useConversationStore.setState({ userName: formData.userName })
-      } else if (currentStep === 2 && formData.userEmail) {
-        // Update email without marking sections complete
+        // Question 1: Name
         const currentState = useConversationStore.getState()
+        const newQuestionCount = currentState.questionCount + 1
+        
+        // Extract fact for name answer
+        const nameFacts = extractFacts(
+          'foundation_name',
+          'What\'s your name?',
+          formData.userName,
+          { category: 'foundation', scopeSection: 'section3_client_information' }
+        )
+        
+        // Update store with name, increment question count, and update progress
+        useConversationStore.setState({ 
+          userName: formData.userName,
+          questionCount: newQuestionCount
+        })
+        
+        // Update progress based on new question count
+        const newProgress = calculateProgressByQuestionCount(newQuestionCount, false)
+        useConversationStore.setState({
+          scopeProgress: {
+            ...useConversationStore.getState().scopeProgress,
+            overallCompleteness: Math.max(useConversationStore.getState().scopeProgress.overallCompleteness, newProgress),
+          },
+          completionPercentage: Math.max(useConversationStore.getState().completionPercentage, newProgress),
+        })
+      } else if (currentStep === 2 && formData.userEmail) {
+        // Question 2: Email
+        const currentState = useConversationStore.getState()
+        const newQuestionCount = currentState.questionCount + 1
+        
+        // Extract fact for email answer
+        const emailFacts = extractFacts(
+          'foundation_email',
+          'What\'s your email?',
+          formData.userEmail,
+          { category: 'foundation', scopeSection: 'section3_client_information' }
+        )
+        
+        // Update store with email, increment question count, and update progress
         useConversationStore.setState({ 
           userName: formData.userName || currentState.userName,
-          userEmail: formData.userEmail 
+          userEmail: formData.userEmail,
+          questionCount: newQuestionCount
+        })
+        
+        // Update progress based on new question count
+        const newProgress = calculateProgressByQuestionCount(newQuestionCount, false)
+        useConversationStore.setState({
+          scopeProgress: {
+            ...useConversationStore.getState().scopeProgress,
+            overallCompleteness: Math.max(useConversationStore.getState().scopeProgress.overallCompleteness, newProgress),
+          },
+          completionPercentage: Math.max(useConversationStore.getState().completionPercentage, newProgress),
         })
       } else if (currentStep === 3) {
-        // Update phone without marking sections complete
+        // Question 3: Phone (optional, but still counts if answered)
         const currentState = useConversationStore.getState()
+        const newQuestionCount = currentState.questionCount + (formData.userPhone ? 1 : 0)
+        
+        // Extract fact for phone answer if provided
+        if (formData.userPhone) {
+          const phoneFacts = extractFacts(
+            'foundation_phone',
+            'Phone number?',
+            formData.userPhone,
+            { category: 'foundation', scopeSection: 'section3_client_information' }
+          )
+        }
+        
+        // Update store with phone, increment question count if answered, and update progress
         useConversationStore.setState({ 
           userName: formData.userName || currentState.userName,
           userEmail: formData.userEmail || currentState.userEmail,
-          userPhone: formData.userPhone || '' 
+          userPhone: formData.userPhone || '',
+          questionCount: newQuestionCount
+        })
+        
+        // Update progress based on new question count if phone was provided
+        if (formData.userPhone) {
+          const { calculateProgressByQuestionCount } = require('@/lib/utils/progressCalculator')
+          const newProgress = calculateProgressByQuestionCount(newQuestionCount, false)
+          useConversationStore.setState({
+            scopeProgress: {
+              ...useConversationStore.getState().scopeProgress,
+              overallCompleteness: Math.max(useConversationStore.getState().scopeProgress.overallCompleteness, newProgress),
+            },
+            completionPercentage: Math.max(useConversationStore.getState().completionPercentage, newProgress),
+          })
+        }
+      } else if (currentStep === 4 && formData.websiteType) {
+        // Question 4: Website Type
+        const currentState = useConversationStore.getState()
+        const newQuestionCount = currentState.questionCount + 1
+        
+        // Extract fact for website type answer
+        const websiteTypeFacts = extractFacts(
+          'foundation_website_type',
+          'What kind of website are we building?',
+          formData.websiteType === 'other' ? (formData.otherDescription || formData.websiteType) : formData.websiteType,
+          { category: 'foundation', scopeSection: 'section2_project_classification' }
+        )
+        
+        // Update store with website type, increment question count, and update progress
+        useConversationStore.setState({ 
+          userName: formData.userName || currentState.userName,
+          userEmail: formData.userEmail || currentState.userEmail,
+          userPhone: formData.userPhone || currentState.userPhone,
+          websiteType: formData.websiteType === 'other' ? (formData.otherDescription || 'other') : formData.websiteType,
+          questionCount: newQuestionCount
+        })
+        
+        // Update progress based on new question count
+        const newProgress = calculateProgressByQuestionCount(newQuestionCount, false)
+        useConversationStore.setState({
+          scopeProgress: {
+            ...useConversationStore.getState().scopeProgress,
+            overallCompleteness: Math.max(useConversationStore.getState().scopeProgress.overallCompleteness, newProgress),
+          },
+          completionPercentage: Math.max(useConversationStore.getState().completionPercentage, newProgress),
         })
       }
       
       if (currentStep < 4) {
         setCurrentStep(currentStep + 1)
       } else {
-        handleSubmit()
+        // Step 4: Trigger exit animation before submitting
+        setIsExiting(true)
+        // handleSubmit will be called after exit animation completes
       }
     }
   }
@@ -189,7 +309,7 @@ export default function FoundationForm() {
       
       setFoundation(foundationData)
       
-      // Navigate to conversation
+      // Navigate to conversation (no delay needed - exit animation already completed)
       router.push('/intake/conversation')
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -360,6 +480,7 @@ export default function FoundationForm() {
                 variant="compact"
                 collapsible
                 defaultExpanded={false}
+                answeredQuestions={getAllFacts()}
               />
             </div>
           </aside>
@@ -367,8 +488,29 @@ export default function FoundationForm() {
 
         {/* Form Content */}
         <div className={isDesktop ? 'col-span-8' : 'max-w-3xl mx-auto'}>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <AnimatePresence mode="wait">
+          <motion.div
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-8"
+            animate={
+              currentStep === 4 && isExiting
+                ? { opacity: 0, y: -20, scale: 0.98 }
+                : { opacity: 1, y: 0, scale: 1 }
+            }
+            transition={
+              currentStep === 4 && isExiting
+                ? {
+                    duration: 0.5,
+                    ease: [0.33, 1, 0.68, 1], // Ease out cubic - smooth exit
+                  }
+                : { duration: 0.3 }
+            }
+            onAnimationComplete={() => {
+              // Navigate after exit animation completes
+              if (currentStep === 4 && isExiting) {
+                handleSubmit()
+              }
+            }}
+          >
+            <AnimatePresence mode="wait">
             {/* Step 1: Name */}
             {currentStep === 1 && (
               <motion.div
@@ -521,11 +663,16 @@ export default function FoundationForm() {
               <motion.div
                 key="step4"
                 initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
+                animate={isExiting ? { opacity: 0 } : { opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                transition={
+                  isExiting
+                    ? { duration: 0.4, ease: [0.33, 1, 0.68, 1] } // Fade content smoothly with card
+                    : { duration: 0.3 }
+                }
                 className="space-y-6"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && formData.websiteType) {
+                  if (e.key === 'Enter' && formData.websiteType && !isExiting) {
                     e.preventDefault()
                     handleNext()
                   }
@@ -590,14 +737,15 @@ export default function FoundationForm() {
                     type="button"
                     className="w-full"
                     size="lg"
-                    disabled={!formData.websiteType}
+                    disabled={!formData.websiteType || isExiting}
                   >
                     Continue
                   </Button>
                   <button
                     onClick={handleBack}
                     type="button"
-                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 transition-colors"
+                    disabled={isExiting}
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <ChevronLeft className="w-3 h-3 mr-1" />
                     Back
@@ -606,8 +754,8 @@ export default function FoundationForm() {
               </motion.div>
             )}
           </AnimatePresence>
+          </motion.div>
         </div>
-      </div>
       </div>
 
       {/* Start Over Modal */}

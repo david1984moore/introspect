@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { ContextSummary } from './ContextSummary'
 import { OptionSelector } from './OptionSelector'
 import { Button } from '@/components/ui/button'
 import { TIMINGS, EASINGS, getAdjustedTimings } from '@/lib/animationTimings'
@@ -35,6 +34,7 @@ export function QuestionDisplay({
 }: QuestionDisplayProps) {
   const [textValue, setTextValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [selectedRadioValue, setSelectedRadioValue] = useState<string | null>(null)
   const questionContainerRef = useRef<HTMLDivElement>(null)
   const firstOptionRef = useRef<HTMLButtonElement>(null)
   const textInputRef = useRef<HTMLInputElement>(null)
@@ -103,9 +103,23 @@ export function QuestionDisplay({
     }
   }, [question?.id, animationPhase, questionNumber, totalEstimatedQuestions])
   
+  // Reset selectedRadioValue when question changes
+  useEffect(() => {
+    if (previousQuestionIdRef.current !== question.id) {
+      setSelectedRadioValue(null)
+    }
+  }, [question.id])
+  
+  // Sync selectedRadioValue with selectedOptionId if selectedOptionId is set but selectedRadioValue is not
+  useEffect(() => {
+    if (selectedOptionId && !selectedRadioValue && question.inputType === 'radio' && question.options && question.options.length > 2) {
+      setSelectedRadioValue(selectedOptionId)
+    }
+  }, [selectedOptionId, selectedRadioValue, question.inputType, question.options])
+  
   // Track question changes to force entrance animations
-  // Use a state to track if this is a new question to ensure it persists across renders
-  // Initialize based on whether this question ID is different from the previous one
+  // CRITICAL FIX: Always detect new questions by comparing question IDs
+  // This ensures entrance animations trigger correctly with AnimatePresence
   const [isNewQuestion, setIsNewQuestion] = useState(() => {
     const isNew = previousQuestionIdRef.current !== question.id
     if (isNew) {
@@ -115,16 +129,29 @@ export function QuestionDisplay({
     return isNew
   })
   
+  // Track the previous question ID to detect changes
+  const prevQuestionIdRef = useRef<string | null>(null)
+  
   useEffect(() => {
-    // Double-check if this is still a new question (in case ref was reset externally)
-    const isActuallyNew = previousQuestionIdRef.current !== question.id
+    // Detect question ID changes - this is the source of truth for new questions
+    const isActuallyNew = prevQuestionIdRef.current !== question.id
     if (isActuallyNew) {
+      console.log('[QuestionDisplay] New question detected:', question.id, 'Previous:', prevQuestionIdRef.current)
       setIsNewQuestion(true)
+      prevQuestionIdRef.current = question.id
       previousQuestionIdRef.current = question.id
     }
-    // Don't reset isNewQuestion - let it persist until the question ID changes
-    // This ensures animations work correctly even if the component re-renders
-  }, [question.id])
+    // Reset isNewQuestion flag after entrance animation completes
+    // This ensures we don't re-trigger entrance if component re-renders with same question
+    if (isActuallyNew && (animationPhase === 'ready' || animationPhase === 'idle')) {
+      // Keep isNewQuestion true during entrance, reset after ready/idle
+      // Small delay to ensure animation completes
+      const timer = setTimeout(() => {
+        setIsNewQuestion(false)
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [question.id, animationPhase])
   
   // Determine animation state based on phase
   const isExiting = animationPhase === 'questionExit'
@@ -134,7 +161,9 @@ export function QuestionDisplay({
                      animationPhase === 'ready' || 
                      (isNewQuestion && animationPhase !== 'questionExit' && animationPhase !== 'processing')
   const isIdle = animationPhase === 'idle' || animationPhase === 'optionSelected'
-  // Show during all phases except processing (including questionExit so exit animation can complete)
+  // CRITICAL FIX: Show during all phases except processing
+  // Must show during questionExit so AnimatePresence can complete exit animation
+  // Must show during questionEnter/ready so entrance animation can play
   const shouldShow = animationPhase !== 'processing'
   
   // Animation variants for different phases
@@ -178,15 +207,19 @@ export function QuestionDisplay({
   
   // Memoize animation values to ensure they trigger re-renders
   const animationValues = getAnimationValues()
-  // Use longer durations for more noticeable, polished animations
-  const transitionDuration = isExiting 
-    ? Math.max(adjustedTimings.QUESTION_FADE_DURATION / 1000, 0.5)
-    : isEntering
-    ? Math.max(adjustedTimings.CONTAINER_FADE_IN / 1000, 0.6)
-    : 0.2
   
-  // Exit animation duration (used by AnimatePresence)
+  // CRITICAL FIX: Consistent animation durations
+  // Exit: Use QUESTION_FADE_DURATION (500ms) for smooth exit
+  // Entrance: Use CONTAINER_FADE_IN (600ms) for smooth entrance
+  // Ensure minimum durations for visibility
   const exitDuration = Math.max(adjustedTimings.QUESTION_FADE_DURATION / 1000, 0.5)
+  const entranceDuration = Math.max(adjustedTimings.CONTAINER_FADE_IN / 1000, 0.6)
+  
+  const transitionDuration = isExiting 
+    ? exitDuration
+    : isEntering
+    ? entranceDuration
+    : 0.2
   
   // Force re-render when animation phase changes to ensure animations trigger
   useEffect(() => {
@@ -237,23 +270,20 @@ export function QuestionDisplay({
   
   return (
     <div className={`max-w-2xl mx-auto px-4 ${className}`}>
-      {/* Context Summary appears ABOVE question (Phase 4 integration) */}
-      {questionNumber > 6 && (
-        <ContextSummary 
-          intelligence={intelligence}
-          currentCategory={question.category}
-          questionNumber={questionNumber}
-          compact={compact}
-        />
-      )}
+      {/* Context Summary removed - no longer displayed */}
       
       {/* Question card with enhanced animations */}
-      {/* AnimatePresence handles visibility, so we always render when shouldShow is true */}
+      {/* CRITICAL FIX: AnimatePresence needs component mounted during questionExit to complete exit animation */}
+      {/* Only hide during processing phase - show during all other phases including questionExit */}
       {shouldShow && (
         <motion.div
           key={`question-${question.id}`}
           ref={questionContainerRef}
-          initial={isEntering ? { opacity: 0, y: 40, scale: 0.96 } : undefined}
+          // CRITICAL FIX: Always set initial for new questions (detected by isNewQuestion or isEntering)
+          // With AnimatePresence mode="wait", new components always mount fresh, so isNewQuestion should be true
+          // But we also check isEntering as a fallback for cases where animation phase is set explicitly
+          // Use false instead of undefined to prevent initial animation if component re-renders with same question
+          initial={isEntering || isNewQuestion ? { opacity: 0, y: 40, scale: 0.96 } : false}
           animate={isExiting ? { opacity: 0, y: -40, scale: 0.96 } : animationValues}
           exit={{ opacity: 0, y: -40, scale: 0.96 }}
           transition={{
@@ -268,10 +298,10 @@ export function QuestionDisplay({
           aria-labelledby={`question-${question.id}`}
           tabIndex={-1}
           onAnimationStart={() => {
-            console.log('[QuestionDisplay] Animation started:', animationPhase, 'animate:', isExiting ? 'EXITING' : JSON.stringify(animationValues), 'isExiting:', isExiting, 'isEntering:', isEntering, 'initial:', isEntering ? '{ opacity: 0, y: 30, scale: 0.95 }' : 'undefined')
+            console.log('[QuestionDisplay] Animation started:', animationPhase, 'animate:', isExiting ? 'EXITING' : JSON.stringify(animationValues), 'isExiting:', isExiting, 'isEntering:', isEntering, 'isNewQuestion:', isNewQuestion, 'initial:', isEntering || isNewQuestion ? '{ opacity: 0, y: 40, scale: 0.96 }' : 'false')
           }}
           onAnimationComplete={() => {
-            console.log('[QuestionDisplay] Animation completed:', animationPhase, 'isExiting:', isExiting)
+            console.log('[QuestionDisplay] Animation completed:', animationPhase, 'isExiting:', isExiting, 'isEntering:', isEntering)
           }}
         >
             {/* Question header */}
@@ -295,20 +325,54 @@ export function QuestionDisplay({
               {question.helperText}
             </p>
           )}
+          {/* Dynamic helper text for radio questions */}
+          {question.inputType === 'radio' && question.options && (
+            <p className="text-sm text-gray-500 mt-3">
+              {question.options.length === 2 
+                ? 'Choose only 1'
+                : question.options.length > 2
+                ? 'Choose the 1 best answer'
+                : ''}
+            </p>
+          )}
         </div>
         
             {/* Question body */}
             <div className="p-6">
               {question.inputType === 'radio' && question.options ? (
-                // Multiple choice options - OptionSelector handles submission immediately
-                <OptionSelector
-                  options={question.options}
-                  onSelect={onAnswer}
-                  disabled={isSubmitting}
-                  selectedValue={selectedOptionId || undefined}
-                  animationPhase={animationPhase}
-                  firstOptionRef={firstOptionRef}
-                />
+                // Multiple choice options
+                <>
+                  <OptionSelector
+                    options={question.options}
+                    onSelect={question.options.length === 2 
+                      ? onAnswer // Immediate submission for 2 options
+                      : (value) => setSelectedRadioValue(value) // Delayed submission for >2 options
+                    }
+                    disabled={isSubmitting}
+                    selectedValue={selectedRadioValue || selectedOptionId || undefined}
+                    animationPhase={animationPhase}
+                    firstOptionRef={firstOptionRef}
+                    immediateSubmit={question.options.length === 2}
+                  />
+                  {/* Continue button for radio questions with more than 2 options - always visible */}
+                  {question.options.length > 2 && (
+                    <div className="mt-6">
+                      <Button
+                        onClick={() => {
+                          const valueToSubmit = selectedRadioValue || selectedOptionId || ''
+                          if (valueToSubmit) {
+                            onAnswer(valueToSubmit)
+                          }
+                        }}
+                        disabled={isSubmitting || !(selectedRadioValue || selectedOptionId)}
+                        className="w-full"
+                        size="lg"
+                      >
+                        {isSubmitting ? 'Submitting...' : 'Continue'}
+                      </Button>
+                    </div>
+                  )}
+                </>
               ) : question.inputType === 'text' ? (
                 // Text input (for truly unique data like names, emails)
                 <div className="space-y-4">
@@ -328,9 +392,11 @@ export function QuestionDisplay({
                       aria-describedby={error ? `input-error-${question.id}` : undefined}
                       aria-invalid={error ? 'true' : 'false'}
                       className={`
-                        w-full px-4 py-3 rounded-lg border transition-colors
-                        focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+                        flex h-10 w-full rounded-lg border transition-colors
+                        pl-2 pr-4 text-base text-gray-900
+                        focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:border-transparent
                         disabled:opacity-50 disabled:cursor-not-allowed
+                        placeholder:text-gray-400
                         ${error 
                           ? 'border-red-300 bg-red-50' 
                           : 'border-gray-300 bg-white'

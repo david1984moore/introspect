@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, ChevronRight } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { TIMINGS, EASINGS, getAdjustedTimings } from '@/lib/animationTimings'
 import type { QuestionOption, AnimationPhase } from '@/types/conversation'
 
@@ -14,6 +14,7 @@ interface OptionSelectorProps {
   className?: string
   animationPhase?: AnimationPhase // Phase 3: Animation state
   firstOptionRef?: React.RefObject<HTMLButtonElement> // Phase 6: Ref for focus management
+  immediateSubmit?: boolean // If false, don't submit immediately (for continue button flow)
 }
 
 export function OptionSelector({
@@ -23,11 +24,11 @@ export function OptionSelector({
   disabled = false,
   className = '',
   animationPhase = 'idle',
-  firstOptionRef
+  firstOptionRef,
+  immediateSubmit = true
 }: OptionSelectorProps) {
   const [textInput, setTextInput] = useState('')
   const [showTextInput, setShowTextInput] = useState(false)
-  const [hoveredOption, setHoveredOption] = useState<string | null>(null)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
   
   useEffect(() => {
@@ -91,17 +92,31 @@ export function OptionSelector({
       // "Something else" option - show text input
       setShowTextInput(true)
     } else {
-      // Regular option - submit immediately
-      onSelect(option.value)
+      // Regular option - submit immediately if immediateSubmit is true, otherwise just select
+      if (immediateSubmit) {
+        onSelect(option.value)
+      } else {
+        // For delayed submission, just call onSelect to update selection state
+        // The parent component will handle showing the continue button
+        onSelect(option.value)
+      }
     }
   }
   
   // Handle "Something else" text submission
   const handleTextSubmit = () => {
     if (textInput.trim()) {
-      onSelect(textInput.trim())
-      setTextInput('')
-      setShowTextInput(false)
+      if (immediateSubmit) {
+        // For immediate submission (2-option questions), submit and hide input
+        onSelect(textInput.trim())
+        setTextInput('')
+        setShowTextInput(false)
+      } else {
+        // For delayed submission (>2-option questions), update selection but keep input visible
+        // The parent component will handle showing the continue button
+        onSelect(textInput.trim())
+        // Keep textInput and showTextInput as-is so user can see what they entered
+      }
     }
   }
   
@@ -119,7 +134,6 @@ export function OptionSelector({
       <div className="space-y-2" role="radiogroup" aria-label="Answer options">
         {options.map((option, index) => {
           const isSelected = selectedValue === option.value
-          const isHovered = hoveredOption === option.value
           const isSomethingElse = option.allowText
           
           // Calculate stagger delay for entrance animation
@@ -133,8 +147,6 @@ export function OptionSelector({
               ref={index === 0 ? firstOptionRef : undefined}
               data-option-index={index}
               onClick={() => handleOptionClick(option)}
-              onMouseEnter={() => setHoveredOption(option.value)}
-              onMouseLeave={() => setHoveredOption(null)}
               disabled={disabled}
               initial={{ opacity: 0, x: -16 }}
               animate={{ opacity: 1, x: 0 }}
@@ -144,15 +156,6 @@ export function OptionSelector({
                 duration: adjustedTimings.OPTION_ENTRANCE_DURATION / 1000,
                 ease: EASINGS.IN_OUT
               }}
-              whileHover={{ 
-                scale: 1.01,
-                x: 4,
-                transition: { duration: adjustedTimings.HOVER_SCALE / 1000 }
-              }}
-              whileTap={{ 
-                scale: 0.99,
-                transition: { duration: TIMINGS.OPTION_PRESS / 1000 }
-              }}
               className={`
                 w-full text-left p-4 rounded-lg border-2 transition-all duration-200
                 ${isSelected 
@@ -160,7 +163,6 @@ export function OptionSelector({
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
                 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                ${isHovered && !isSelected ? 'shadow-sm' : ''}
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
               `}
               type="button"
@@ -219,10 +221,6 @@ export function OptionSelector({
                   )}
                 </div>
                 
-                {/* Arrow indicator on hover for non-text options */}
-                {!isSomethingElse && isHovered && !isSelected && (
-                  <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
-                )}
               </div>
             </motion.button>
           )
@@ -270,7 +268,7 @@ export function OptionSelector({
                   "
                   type="button"
                 >
-                  Continue
+                  {immediateSubmit ? 'Continue' : 'Done'}
                 </button>
               </div>
             </div>

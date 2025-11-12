@@ -143,6 +143,9 @@ export interface SessionIntelligence {
   
   // Content & Assets
   contentReadiness?: 'ready' | 'in_progress' | 'need_help'
+  contentUpdateFrequency?: 'daily' | 'weekly' | 'monthly' | 'few_months' | 'rarely' | string
+  contentManager?: 'client' | 'agency' | 'collaborative' | 'other' // Who will manage/update content
+  whoWillUpdate?: string // Free text if contentManager is 'other'
   hasLogo?: boolean
   hasBrandColors?: boolean
   hasPhotography?: boolean

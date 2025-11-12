@@ -16,6 +16,7 @@ export function ScopeProgressBar({
   className = ''
 }: ScopeProgressBarProps) {
   const { overallCompleteness, sectionsComplete, sectionsRemaining } = progress
+  const roundedProgress = Math.round(overallCompleteness)
   
   return (
     <div className={`space-y-2 ${className}`}>
@@ -24,39 +25,22 @@ export function ScopeProgressBar({
         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: `${overallCompleteness}%` }}
+            animate={{ width: `${roundedProgress}%` }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="h-full bg-gradient-to-r from-primary to-primary-dark"
+            className="h-full bg-primary"
             role="progressbar"
-            aria-valuenow={overallCompleteness}
+            aria-valuenow={roundedProgress}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`Project scope ${overallCompleteness}% complete`}
+            aria-label={`Project scope ${roundedProgress}% complete`}
           />
-        </div>
-        
-        {/* Milestone markers (every 25%) */}
-        <div className="absolute inset-0 flex justify-between items-center px-1">
-          {[0, 25, 50, 75, 100].map(milestone => {
-            const isPassed = overallCompleteness >= milestone
-            return (
-              <div
-                key={milestone}
-                className={`w-3 h-3 rounded-full border-2 transition-colors ${
-                  isPassed
-                    ? 'bg-primary border-primary'
-                    : 'bg-white border-gray-300'
-                }`}
-              />
-            )
-          })}
         </div>
       </div>
       
       {/* Progress text */}
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium text-gray-900">
-          {overallCompleteness}% complete
+          {roundedProgress}%
         </span>
       </div>
     </div>

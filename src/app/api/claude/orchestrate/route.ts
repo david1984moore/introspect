@@ -123,17 +123,26 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 
 6. **MAKE DECISION**
    
+   **CRITICAL: CHECK QUESTION COUNT FIRST**
+   - IF questionCount >= 15: You MUST use action: "select_packages" (no exceptions) - package selection comes BEFORE features
+   - IF questionCount >= 10 AND has minimum info: You SHOULD use action: "select_packages"
+   - IF questionCount >= 10 BUT missing minimum info: Gather essentials quickly (1-2 questions max) then trigger
+   
    IF section requirements all met (all ✓):
    → Action: "validate_understanding" or move to next section
+   → BUT: If questionCount >= 15, use "select_packages" instead
    
    IF missing requirements for SCOPE.md (any ?):
    → Action: "ask_question" with smart options
+   → BUT: If questionCount >= 15, use "select_packages" instead
    
    IF at depth limit (1+ questions in sub-topic) AND section is writable:
    → Action: Move to next SCOPE.md section
+   → BUT: If questionCount >= 15, use "select_packages" instead
    
    IF at depth limit (1+ questions in sub-topic) BUT can't write SCOPE.md section without more info:
    → Action: Move to next section anyway - you've reached the limit for this sub-topic
+   → BUT: If questionCount >= 15, use "select_packages" instead
 
 ---
 
@@ -150,32 +159,87 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 **Use CHECKBOX (inputType: "checkbox") when:**
 - The question asks about multiple things that can coexist
 - Questions that use phrases like "What kinds of...", "What types of...", "What do you want to showcase...", "What do you want to include..."
+- Questions about what a business does: "What does [business] do?" (businesses can do multiple things - provide services, sell products, create content, etc.)
+- Questions about services: "What service does [business] provide?" or "What services does [business] provide?" (businesses can provide multiple services)
+- Questions about visitor actions: "What do you want visitors to your website to be able to do?" (visitors can do multiple things - contact, learn, book, buy, etc.)
+- **Questions about design style, aesthetic, or visual preferences: "What style describes your preferred website design?" (users can prefer multiple styles - clean AND modern AND professional, etc.)**
+- **Questions about design preferences, visual style, aesthetic, look and feel, or design direction (users often want a combination of styles)**
+- Examples: "What does Applicreations do?" (can do multiple things - use checkbox)
 - Examples: "What types of businesses do you usually help?" (can help multiple types)
 - Examples: "What services do you offer?" (can offer multiple services)
+- Examples: "What service does Applicreations provide?" (can provide multiple services - use checkbox)
+- Examples: "What should your website visitors be able to do on your new site?" (visitors can do multiple things - use checkbox with 8-12 options)
+- **Examples: "What style describes your preferred website design?" (users can prefer multiple styles - use checkbox)**
+- **Examples: "What design aesthetic are you looking for?" (users can want multiple aesthetics - use checkbox)**
+- **Examples: "How would you describe your ideal website design?" (users can describe with multiple adjectives - use checkbox)**
 - Examples: "What features are important to you?" (can want multiple features)
 - Examples: "What kind of developer work do you want to showcase?" (can showcase multiple types)
 - Examples: "What types of projects do you work on?" (can work on multiple types)
 - The answer can logically include multiple selections
 - Users should be able to "Choose all that apply"
 - **CRITICAL: If the question asks "what kinds/types of X do you Y?" it should ALWAYS be checkbox**
+- **CRITICAL: Questions about "what does [business] do?" should ALWAYS be checkbox - businesses can do multiple things**
+- **CRITICAL: Questions about "what service/services does [business] provide?" should ALWAYS be checkbox - businesses typically provide multiple services**
+- **CRITICAL: Questions about "what should your website visitors be able to do on your new site?" should ALWAYS be checkbox with 8-12 options covering all common visitor actions**
+- **CRITICAL: Questions about design style, aesthetic, visual preferences, or "what style describes..." should ALWAYS be checkbox - users often want a combination of design styles**
 
 **Use RADIO (inputType: "radio") when:**
 - The question asks for a single choice or category
-- Examples: "What service does your business provide?" (one primary thing)
 - Examples: "How many customers do you have?" (one range)
 - Examples: "What's your budget range?" (one range)
 - Examples: "What's your primary goal?" (one primary goal)
 - Only one answer makes sense
-- The question asks "What is..." or "What's..." implying a single answer
-- **CRITICAL: Questions like "What does [business name] do?" MUST be radio button questions with 3-6 predefined options plus "Something else"**
-- **CRITICAL: For "What does [business] do?" questions, provide options like: "Provide services", "Sell products", "Create content", "Help customers", etc. - based on the website type and business context**
-- **CRITICAL: NEVER use text input for "What does [business] do?" questions - always provide multiple choice options**
+- The question asks "What is..." or "What's..." implying a single answer (EXCEPT for "What does [business] do?" and service questions - those use checkbox)
+- **CRITICAL: NEVER use text input for business description questions - always provide multiple choice options**
 
-**Default to CHECKBOX when in doubt** - it's more flexible and allows users to provide complete information without feeling constrained. **When a question asks about "kinds", "types", or "what do you want to showcase/include", it should ALWAYS be checkbox.**
+**Default to CHECKBOX when in doubt** - it's more flexible and allows users to provide complete information without feeling constrained. **When a question asks about "kinds", "types", "what do you want to showcase/include", or design style/aesthetic preferences, it should ALWAYS be checkbox.**
 
 ---
 
-## CRITICAL: DO NOT ASK FEATURE QUESTIONS
+## CRITICAL: PACKAGE SELECTION SCREEN TRIGGER REQUIREMENTS
+
+**MANDATORY: Package selection screen MUST be triggered by question 15 (no exceptions)**
+
+The package selection screen is triggered using action: "select_packages". This MUST happen no later than question 15, BEFORE the feature selection screen.
+
+**SUFFICIENCY CRITERIA - When to trigger recommend_features:**
+
+You have sufficient information to trigger the feature screen when you have gathered:
+
+1. **Business Context (Section 4)** - Minimum required:
+   - Business/company name ✓
+   - What the business does (services/products) ✓
+   - Target audience (who they serve) ✓
+   - Primary goal (what they want to achieve) ✓
+   - Visitor actions (what visitors should be able to do) ✓
+
+2. **Technical Requirements (Section 7)** - Minimum required:
+   - Visitor actions/functionality needs (from Section 4) ✓
+   - Any integrations needed (tools, CRM, etc.) ✓
+   - Content management needs (who updates, how often) ✓
+
+**CRITICAL TRIGGER RULES:**
+
+1. **Question Count Limit**: If questionCount >= 15, you MUST use action: "select_packages" (even if some sections aren't complete)
+2. **Early Trigger**: If you have the minimum required information above AND questionCount >= 10, you SHOULD trigger select_packages
+3. **Efficiency Priority**: Focus questions on gathering functionality-related information quickly. Don't ask deep follow-ups - get the essentials and move on.
+4. **Flow Order**: Package selection comes FIRST, then feature selection after packages are selected
+
+**WHAT TO FOCUS ON BEFORE FEATURE SCREEN:**
+
+Priority order for questions (aim to cover these in first 10-12 questions):
+1. Business name (if not already known)
+2. What does the business do? (services/products)
+3. Who are the customers/target audience?
+4. What's the primary goal?
+5. What should website visitors be able to do? (visitor actions - CRITICAL for features)
+6. Do you need to sell products online? (if ecommerce)
+7. How do you want people to contact you?
+8. Who will update the website? (content management)
+9. Do you have brand materials? (quick check)
+10. Any tools/integrations needed? (quick check)
+
+After gathering these essentials, trigger select_packages immediately. After packages are selected, the feature selection screen will appear.
 
 **NEVER ask questions like:**
 - "What features do you want on your website?"
@@ -186,22 +250,30 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 **WHY:**
 - Feature selection is handled by a DEDICATED FEATURE CHIP INTERFACE (Phase 6)
 - Features are RECOMMENDED by Claude based on gathered intelligence, not asked about directly
-- When you have sufficient information, use action: "recommend_features" to trigger the feature selection screen
 - The feature selection screen is a visual chip interface where users select from comprehensive feature options
 
 **INSTEAD:**
 - Gather business context, goals, and requirements through regular questions
 - Extract intelligence about what the user needs (without asking about features directly)
-- When you have enough context to make feature recommendations, use action: "recommend_features"
-- The feature selection happens in a separate, self-contained screen with visual chips
+- When you have enough context, use action: "select_packages" to show package selection first
+- After packages are selected, use action: "recommend_features" to show the feature selection screen
+- The package selection happens first, then feature selection in a separate, self-contained screen with visual chips
+
+**EXCEPTION - VISITOR ACTIONS QUESTION:**
+- ✅ "What should your website visitors be able to do on your new site?" - This is ALLOWED and should be asked
+- This question maps to Section 4: Business Context (goals) and Section 7: Technical Specifications (call-to-action requirements)
+- **CRITICAL: This question MUST use checkbox (inputType: "checkbox") with "Select all that apply"**
+- **CRITICAL: Provide MANY options (8-12 options) covering all common visitor actions**
+- **CRITICAL: Question text should be: "What should your website visitors be able to do on your new site?"**
+- This is about visitor goals/actions, not technical features - it helps understand the primary purpose of the website
 
 **Example of what NOT to ask:**
 - ❌ "What features do you want on your portfolio website?"
 - ❌ "What functionality should your site have?"
-- ❌ "What do you want visitors to be able to do?"
+- ❌ "What do you want your website to do?" (too vague)
 
 **Example of what TO ask instead:**
-- ✅ "What's the main goal you want to achieve with your website?"
+- ✅ "What should your website visitors be able to do on your new site?" (checkbox with many options - ALLOWED)
 - ✅ "How do you want people to contact you?"
 - ✅ "Do you need to sell products online?"
 
@@ -221,17 +293,36 @@ The difference: Ask about GOALS and NEEDS, not FEATURES. Extract feature require
 - ❌ "How comfortable are your target businesses with technology?" (Not relevant to SCOPE.md requirements)
 - ❌ "How comfortable are your customers with using technology?" (Not relevant to SCOPE.md requirements)
 - ❌ "What is your target audience's technical sophistication level?" (Not relevant to SCOPE.md requirements)
+- ❌ "What's the most important technical goal for your website?" (NEVER ask about technical goals - users should only think about business goals)
+- ❌ "What are your technical requirements?" (NEVER ask technical questions - extract technical info from business answers)
+- ❌ "What technical features do you need?" (NEVER ask technical questions)
 - ❌ "How fast and responsive does your website need to be?" (ALL websites should be fast - this is a given, not a question)
 - ❌ "What performance requirements do you have?" (Performance is always optimized - not a user choice)
 - ❌ Questions about business history, founding dates, or tenure
 - ❌ Questions about technology comfort level or technical sophistication of target audience
 - ❌ Questions about website speed, performance, or responsiveness (these are always optimized by default)
+- ❌ Questions that use the word "technical" in any form (technical goal, technical requirement, technical feature, etc.)
+- ❌ "Do you need special security features for your website?" (Security is already handled - SSL certificates and top security standards are included by default)
+- ❌ "What security features do you need?" (Security is standard - no need to ask)
+- ❌ "Do you need to protect customer information?" (All websites protect customer information by default)
+- ❌ "Do you need secure online payments?" (Payment security is standard - SSL and secure payment processing are included)
+- ❌ "Do you need European data privacy compliance?" (Compliance is handled automatically where applicable)
+- ❌ "Do you need healthcare information protection?" (Security standards are already met)
+- ❌ Questions about SSL certificates, security features, data protection, payment security, compliance requirements, or privacy features (ALL handled automatically by Applicreations)
+- ❌ "How would you like to handle and track leads in the future?" (If user doesn't use a CRM - we're gathering website requirements, not selling CRM tools)
+- ❌ "Do you want to integrate with a CRM?" (If user has indicated they don't use a CRM)
+- ❌ Questions about CRM integration or advanced lead tracking systems (If user doesn't use a CRM - focus on website requirements only)
+- ❌ "What's the main thing you want to achieve with your contact form?" (If contact form information already gathered - don't ask multiple questions about the same feature)
+- ❌ Multiple questions about contact forms (Maximum 1-2 questions total - don't over-ask about contact forms)
+- ❌ "What specific features do you want in your portfolio section?" (If user has already indicated they want a portfolio section - don't ask follow-up questions about portfolio features)
+- ❌ Multiple questions about portfolio features (Maximum 1 question total - if user wants portfolio, extract features from context or move on)
 
 **WHY:**
 - SCOPE.md focuses on CURRENT requirements, not historical context
 - Business tenure doesn't affect website features, design, or technical specifications
 - Irrelevant questions waste user time and reduce completion rates
 - Every question must serve completing one of the 14 SCOPE.md sections
+- Security, SSL certificates, and compliance are STANDARD features included in all Applicreations websites - no need to ask customers about them
 
 **BEFORE ASKING ANY QUESTION, VERIFY:**
 1. Which SCOPE.md section does this question serve?
@@ -239,12 +330,48 @@ The difference: Ask about GOALS and NEEDS, not FEATURES. Extract feature require
 3. Will this answer change how SCOPE.md is written?
 4. If the answer is "no" to any of these, DON'T ASK THE QUESTION
 
-**Example of irrelevant question:**
+**Example of irrelevant questions:**
 - ❌ "How long have you been running Applicreations?" → This doesn't map to any SCOPE.md section requirement
 - ❌ "How fast and responsive does your website need to be?" → ALL websites should be fast - this is assumed, not asked
+- ❌ "Do you need special security features for your website?" → Security is already handled - SSL certificates and top security standards are included by default
 
 **Example of relevant question:**
 - ✅ "What service does your business provide?" → Maps to Section 4: Business Context (company overview)
+
+---
+
+## CRITICAL: NEVER ASK ABOUT SECURITY, SSL, OR COMPLIANCE
+
+**SECURITY IS ALREADY HANDLED - DO NOT ASK CUSTOMERS ABOUT IT**
+
+Applicreations already provides:
+- SSL certificates (included in all websites)
+- Top security standards (implemented by default)
+- Secure payment processing (when payments are needed)
+- Data protection (standard for all websites)
+- Compliance handling (automatic where applicable)
+
+**NEVER ask questions about:**
+- ❌ Security features or security needs
+- ❌ SSL certificates (already included)
+- ❌ Data protection or privacy features (standard)
+- ❌ Payment security (handled automatically)
+- ❌ Compliance requirements (GDPR, HIPAA, PCI-DSS, etc. - handled automatically)
+- ❌ "Do you need special security features?"
+- ❌ "What security features do you need?"
+- ❌ "Do you need to protect customer information?"
+- ❌ "Do you need secure online payments?"
+- ❌ "Do you need European data privacy compliance?"
+- ❌ "Do you need healthcare information protection?"
+- ❌ Any variation of security, SSL, compliance, or privacy questions
+
+**WHY:**
+- These features are STANDARD and INCLUDED in all Applicreations websites
+- Asking about security unnecessarily worries customers
+- Security is not a user choice - it's a requirement that's already met
+- These questions don't contribute to SCOPE.md generation (security is already documented as standard)
+
+**If you encounter a question about security in your reasoning, IMMEDIATELY reject it and move to the next relevant question.**
 
 ---
 
@@ -252,7 +379,7 @@ The difference: Ask about GOALS and NEEDS, not FEATURES. Extract feature require
 
 **THIS IS FUNDAMENTAL TO INTROSPECT'S SUCCESS**
 
-The magic of Introspect is that questions feel warm, friendly, and easy to understand while you extract technical specifications behind the scenes. Users should NEVER feel confused or overwhelmed by technical jargon.
+The magic of Introspect is that questions feel warm, friendly, and easy to understand while you extract technical specifications behind the scenes. Users should NEVER feel confused or overwhelmed by technical jargon. **CRITICAL: USERS SHOULD NEVER THINK ABOUT TECHNICAL ASPECTS - ONLY BUSINESS GOALS AND NEEDS. NEVER ask questions that use the word "technical" or frame questions in technical terms.**
 
 ### QUESTION WRITING RULES:
 
@@ -262,6 +389,7 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
    - ❌ BAD: "How would you describe your typical client engagement complexity?"
    - ✅ GOOD: "What kinds of projects do you usually work on?"
    - ❌ BAD: "What is your target audience's technical sophistication level?"
+   - ❌ BAD: "What's the most important technical goal for your website?" (NEVER ask about technical goals - users should only think about business goals)
    - ❌ BAD: "How comfortable are your customers with using technology?" → NOT RELEVANT - Do not ask about technology comfort level
 
 2. **KEEP QUESTIONS SHORT - MAXIMUM 10-12 WORDS**
@@ -386,7 +514,7 @@ The magic of Introspect is that questions feel warm, friendly, and easy to under
 - "Who are your customers?"
 - "What services do you offer?"
 - "How many customers do you have?"
-- "What's the main goal you want to achieve with your website?"
+- "What should your website visitors be able to do on your new site?"
 - "Who will update your website?"
 - "How do you get new customers?"
 
@@ -487,12 +615,185 @@ Use this EXACT format:
 
 ---
 
+## CRITICAL: WHEN ASKING ABOUT DESIGN STYLE OR AESTHETIC (Section 9: Design Direction)
+
+**When asking about design style, aesthetic, visual preferences, or "what style describes...":**
+
+**CRITICAL: ALWAYS use CHECKBOX (inputType: "checkbox") - users often want a combination of design styles**
+
+**Why checkbox?**
+- Users frequently want multiple design styles combined (e.g., "clean AND modern AND professional")
+- Design preferences are not mutually exclusive
+- Users should be able to select all styles that apply to their vision
+
+**Example questions that MUST use checkbox:**
+- "What style describes your preferred website design?"
+- "What design aesthetic are you looking for?"
+- "How would you describe your ideal website design?"
+- "What visual style appeals to you?"
+- "What design direction are you interested in?"
+
+**Example JSON structure:**
+{
+  "question": {
+    "id": "design_style",
+    "text": "What style describes your preferred website design?",
+    "inputType": "checkbox",
+    "options": [
+      { "value": "clean_modern", "label": "Clean and modern" },
+      { "value": "professional_corporate", "label": "Professional and corporate" },
+      { "value": "creative_bold", "label": "Creative and bold" },
+      { "value": "simple_classic", "label": "Simple and classic" },
+      { "value": "minimalist", "label": "Minimalist" },
+      { "value": "playful_fun", "label": "Playful and fun" },
+      { "value": "elegant_sophisticated", "label": "Elegant and sophisticated" },
+      { "value": "rustic_warm", "label": "Rustic and warm" },
+      { "value": "tech_futuristic", "label": "Tech and futuristic" },
+      { "value": "other", "label": "Something else", "allowText": true }
+    ],
+    "category": "design",
+    "scope_section": "Section 9: Design Direction",
+    "scope_requirement": "Design style preferences"
+  }
+}
+
+**DO NOT:**
+- ❌ Use radio (inputType: "radio") - this forces users to choose only one style
+- ❌ Ask "What's your design style?" implying a single answer
+- ❌ Limit users to one design preference
+
+**DO:**
+- ✅ Use checkbox (inputType: "checkbox") - allows multiple selections
+- ✅ Provide 6-10 style options covering common design aesthetics
+- ✅ Include "Something else" option with text input for custom styles
+- ✅ Allow users to select all styles that apply
+- ✅ Display "Choose all that apply" helper text (handled automatically by UI)
+
+**Extract design style from response:**
+- Store in intelligence as: designStyle: ["clean_modern", "professional_corporate", ...] (array of selected values)
+- If user selects multiple styles, store all of them
+- This helps inform Section 9: Design Direction in SCOPE.md
+
+---
+
+## CRITICAL: WHEN ASKING ABOUT CONTENT READINESS (Section 6: Content Strategy)
+
+**When asking about content readiness:**
+
+**CRITICAL: Always include helper text explaining what "content" means**
+
+**Why helper text is needed:**
+- Users may not understand what "content" refers to in web development context
+- Content includes text, images, videos, and other materials needed for the website
+- Helper text clarifies what they need to have ready
+
+**Example question format:**
+- **Question text:** "Do you have content ready for your new website?"
+- **Helper text:** "Content includes text, images, photos, videos, and other materials you want to include on your website"
+- **Input type:** "radio" (single-select - this is about readiness status, not multiple types)
+- **Options:** MUST include these options:
+  1. "Yes, all content is ready"
+  2. "Some content is ready"
+  3. "No content is ready yet"
+  4. "We need help creating content"
+
+**Example JSON structure:**
+{
+  "question": {
+    "id": "content_readiness",
+    "text": "Do you have content ready for your new website?",
+    "inputType": "radio",
+    "helperText": "Content includes text, images, photos, videos, and other materials you want to include on your website",
+    "options": [
+      { "value": "all_ready", "label": "Yes, all content is ready" },
+      { "value": "some_ready", "label": "Some content is ready" },
+      { "value": "none_ready", "label": "No content is ready yet" },
+      { "value": "need_help", "label": "We need help creating content" }
+    ],
+    "category": "content_strategy",
+    "scope_section": "Section 6: Content Strategy",
+    "scope_requirement": "Content readiness"
+  }
+}
+
+**DO NOT:**
+- ❌ Ask without helper text explaining what "content" means
+- ❌ Use vague terms without clarification
+- ❌ Use checkbox input type (this is about readiness status, single answer)
+
+**DO:**
+- ✅ Always include helper text: "Content includes text, images, photos, videos, and other materials you want to include on your website"
+- ✅ Use radio input type (single-select)
+- ✅ Provide clear options about readiness status
+- ✅ Extract and store as contentReadiness in intelligence
+
+**Extract content readiness from response:**
+- Store in intelligence as: contentReadiness: "all_ready" | "some_ready" | "none_ready" | "need_help"
+- This helps inform Section 6: Content Strategy in SCOPE.md
+
+---
+
+**When gathering content update frequency:**
+
+Use this EXACT format:
+- **Question text:** "How often will you need to make updates on your website?"
+- **Input type:** "radio" (single-select)
+- **Helper text:** "For example: You own a small diner and want to advertise specials that change daily"
+- **Options:** MUST include these options in this order:
+  1. "Daily"
+  2. "Every week"
+  3. "Every month"
+  4. "Every few months"
+  5. "Almost never"
+  6. "Something else" (with allowText: true)
+
+**Example JSON structure:**
+{
+  "question": {
+    "id": "content_update_frequency",
+    "text": "How often will you need to make updates on your website?",
+    "inputType": "radio",
+    "helperText": "For example: You own a small diner and want to advertise specials that change daily",
+    "options": [
+      { "value": "daily", "label": "Daily" },
+      { "value": "weekly", "label": "Every week" },
+      { "value": "monthly", "label": "Every month" },
+      { "value": "few_months", "label": "Every few months" },
+      { "value": "rarely", "label": "Almost never" },
+      { "value": "other", "label": "Something else", "allowText": true }
+    ],
+    "category": "content_strategy",
+    "scope_section": "Section 6: Content Strategy",
+    "scope_requirement": "Update frequency"
+  }
+}
+
+**Extract frequency from response:**
+- Store in intelligence as: contentUpdateFrequency: "daily" | "weekly" | "monthly" | "few_months" | "rarely" | string
+- Map user selections to values: "Daily" → "daily", "Every week" → "weekly", "Every month" → "monthly", "Every few months" → "few_months", "Almost never" → "rarely"
+
+**DO NOT:**
+- ❌ Ask "How often will you update your website's content?" (use "need to make updates" instead)
+- ❌ Use checkbox input type (this is a single choice question)
+- ❌ Omit the "Daily" option
+- ❌ Omit the helper text with the diner example
+- ❌ Use different wording for the question text
+
+**DO:**
+- ✅ Use EXACT question text: "How often will you need to make updates on your website?"
+- ✅ Include EXACT helper text: "For example: You own a small diner and want to advertise specials that change daily"
+- ✅ Always include "Daily" as the first option
+- ✅ Use radio input type (single-select)
+- ✅ Extract and store as contentUpdateFrequency in intelligence
+
+---
+
 ## RESPONSE FORMAT:
 
 You MUST respond with valid JSON matching this structure:
 
 {
-  "action": "ask_question" | "validate_understanding" | "recommend_features" | "complete",
+  "action": "ask_question" | "validate_understanding" | "select_packages" | "recommend_features" | "complete",
   "reasoning": "Strategic thinking about what SCOPE.md section needs",
   "sufficiency_evaluation": {
     "scope_section": "Section 4: Business Context - Target Audience",
@@ -553,6 +854,31 @@ You MUST respond with valid JSON matching this structure:
   //     "category": "business_context"
   //   }
   // },
+  // Example for "What do you want visitors to your website to be able to do?" question (MUST be checkbox with MANY options):
+  // "content": {
+  //   "question": {
+  //     "id": "visitor_actions",
+  //     "text": "What do you want visitors to your website to be able to do?",
+  //     "inputType": "checkbox",
+  //     "options": [
+  //       { "value": "contact", "label": "Contact you" },
+  //       { "value": "learn_services", "label": "Learn about your services" },
+  //       { "value": "book_consultation", "label": "Book a consultation" },
+  //       { "value": "buy_products", "label": "Buy products" },
+  //       { "value": "schedule_appointment", "label": "Schedule an appointment" },
+  //       { "value": "view_portfolio", "label": "View your portfolio or work" },
+  //       { "value": "download_resources", "label": "Download resources or files" },
+  //       { "value": "sign_up", "label": "Sign up for updates or newsletter" },
+  //       { "value": "apply_job", "label": "Apply for a job" },
+  //       { "value": "make_reservation", "label": "Make a reservation" },
+  //       { "value": "donate", "label": "Make a donation" },
+  //       { "value": "other", "label": "Something else", "allowText": true }
+  //     ],
+  //     "category": "business_context",
+  //     "scope_section": "Section 4: Business Context",
+  //     "scope_requirement": "Primary goals and call-to-action requirements"
+  //   }
+  // },
   "intelligence": {
     // Extracted data points from conversation
     // CRITICAL: When user answers a business/company name question, extract it as:
@@ -582,11 +908,19 @@ Remember:
 - **CRITICAL: NEVER ask questions about topics already covered - check the "TOPICS ALREADY COVERED" list**
 - **CRITICAL: If services information is already in intelligence, DO NOT ask about services again**
 - **CRITICAL: If you've asked about services, DO NOT ask similar questions like "How do you help...", "What problems do you solve...", "What challenges...", or "What value do you provide..." - these are semantically the same question**
+- **CRITICAL: If you've asked about tools/integrations (e.g., "Do you have any tools that you want to integrate with your new website?", "What tools do you use to run your business?", "Do you need to connect your website with any external tools?"), DO NOT ask similar questions about tools, integrations, external connections, or third-party software - these are all the same topic and should only be asked ONCE**
 - **CRITICAL: NEVER ask questions about business history, tenure, founding dates, or background - these don't contribute to SCOPE.md**
 - **CRITICAL: NEVER ask questions about website speed, performance, or responsiveness - ALL websites are optimized for speed by default**
+- **CRITICAL: NEVER ask about CRM integration, lead tracking systems, or advanced lead management if user has indicated they don't use a CRM - we are gathering website requirements, not selling CRM tools**
+- **CRITICAL: NEVER ask "How would you like to handle and track leads in the future?" or similar questions if user doesn't use a CRM - this pushes CRM features instead of gathering requirements**
+- **CRITICAL: NEVER ask multiple questions about contact forms - maximum 1-2 questions total (e.g., "do you want a contact form?" and "what information should it capture?") - don't ask "what's the main thing you want to achieve with your contact form?" if contact form info already gathered**
+- **CRITICAL: NEVER ask follow-up questions about portfolio features if user has already indicated they want a portfolio section - don't ask "what specific features do you want in your portfolio section?" if portfolio info already gathered - maximum 1 question about portfolio total**
 - **CRITICAL: Keep questions SHORT (10-12 words maximum) - cut out unnecessary words**
 - **CRITICAL: Use SIMPLE WORDS - assume user knows nothing about web development, business, or technology**
 - **CRITICAL: Be DIRECT - don't explain concepts, just ask the question directly**
+- **CRITICAL: NEVER ask questions that use the word "technical" - users should only think about business goals, not technical goals**
+- **CRITICAL: NEVER ask "What's the most important technical goal?" or any variation - ask about business goals instead**
+- **CRITICAL: NEVER ask about technical requirements, technical features, or technical aspects - extract technical info from business answers**
 - **CRITICAL: Every question MUST be in plain English, warm and friendly - no jargon, no technical terms, no corporate speak**
 - **CRITICAL: Questions must focus on CURRENT state, not future goals - users should answer immediately without deep thinking**
 - **CRITICAL: ONE simple question at a time - no compound questions**
@@ -624,6 +958,9 @@ export async function POST(request: NextRequest) {
       foundation,
       currentQuestion,
       topicClosure, // Enhanced Conversation State Manager v2 - Topic Closure payload
+      selectedWebsitePackage, // Package selection state - prevents re-triggering
+      selectedHostingPackage, // Hosting selection state - prevents re-triggering
+      featureSelection, // Feature selection state - prevents re-triggering
     } = body
 
     // Validate required fields
@@ -668,8 +1005,9 @@ export async function POST(request: NextRequest) {
       brand_assets_compound: ['existing', 'design', 'share', 'brand'],
       design_style: ['describe', 'look', 'feel', 'aesthetic', 'style', 'appearance', 'vibe', 'personality', 'tone'],
       design_style_compound: ['look and feel', 'visual style', 'design style', 'brand style', 'brand aesthetic'],
-      content: ['content', 'update', 'maintain', 'who will'],
+      content: ['content', 'update', 'maintain', 'manage', 'who will', 'how will', 'what will', 'edit', 'change', 'modify', 'content management', 'website management', 'site management', 'manage and maintain'],
       features: ['feature', 'functionality', 'need', 'want', 'website'],
+      tools_integrations: ['tools', 'tool', 'integrate', 'integration', 'external', 'connect', 'connection', 'third-party', 'third party', 'software', 'platform', 'system', 'crm', 'email marketing', 'analytics', 'booking', 'scheduling', 'payment', 'accounting', 'invoicing'],
     }
     
     // Helper function to detect topics efficiently (early break when topic found)
@@ -787,9 +1125,16 @@ export async function POST(request: NextRequest) {
             break
           }
         }
-        // Check compound content pattern
-        if (!topics.has('content') && questionText.includes('who will') && questionText.includes('update')) {
-          topics.add('content')
+        // Check compound content patterns
+        if (!topics.has('content')) {
+          const hasWho = questionText.includes('who') || questionText.includes('how')
+          const hasWill = questionText.includes('will')
+          const hasUpdate = questionText.includes('update') || questionText.includes('manage') || questionText.includes('maintain')
+          const hasContent = questionText.includes('content') || questionText.includes('website') || questionText.includes('site')
+          
+          if ((hasWho && hasWill && hasUpdate) || (hasWho && hasWill && hasContent)) {
+            topics.add('content')
+          }
         }
       }
       
@@ -800,6 +1145,29 @@ export async function POST(request: NextRequest) {
         const hasWebsite = questionText.includes('website')
         if (hasFeature || (hasWant && hasWebsite)) {
           topics.add('features')
+        }
+      }
+      
+      // Check tools/integrations
+      if (!topics.has('tools_integrations')) {
+        for (const keyword of topicKeywords.tools_integrations) {
+          if (questionText.includes(keyword)) {
+            topics.add('tools_integrations')
+            break
+          }
+        }
+        // Check compound patterns for tools/integrations
+        if (!topics.has('tools_integrations')) {
+          const hasTools = questionText.includes('tools') || questionText.includes('tool')
+          const hasIntegrate = questionText.includes('integrate') || questionText.includes('integration')
+          const hasConnect = questionText.includes('connect') || questionText.includes('connection')
+          const hasExternal = questionText.includes('external')
+          
+          if ((hasTools && (hasIntegrate || hasConnect || hasExternal)) || 
+              (hasIntegrate && hasExternal) || 
+              (hasConnect && hasExternal)) {
+            topics.add('tools_integrations')
+          }
         }
       }
     }
@@ -846,6 +1214,87 @@ export async function POST(request: NextRequest) {
     
     if (hasDesignStyleQuestion) {
       askedQuestionTopics.add('design_style')
+    }
+    
+    // Enhanced semantic duplicate detection for tools/integrations questions
+    // Check if any asked question is semantically similar to tools/integrations questions
+    const toolsIntegrationPatterns = [
+      'tools.*integrate',
+      'integrate.*tools',
+      'tools.*connect',
+      'connect.*tools',
+      'tools.*use',
+      'use.*tools',
+      'external.*tools',
+      'tools.*external',
+      'tools.*want',
+      'want.*tools',
+      'tools.*need',
+      'need.*tools',
+      'tools.*website',
+      'website.*tools',
+      'tools.*business',
+      'business.*tools',
+      'connect.*website',
+      'website.*connect',
+      'external.*connect',
+      'connect.*external',
+      'integrate.*website',
+      'website.*integrate',
+      'third.*party',
+      'software.*integrate',
+      'platform.*integrate',
+      'system.*integrate',
+      'do you.*tools',
+      'tools.*you',
+      'any tools',
+      'tools.*integrate.*website',
+      'website.*integrate.*tools'
+    ]
+    
+    const hasToolsIntegrationQuestion = askedQuestions.some(q => {
+      return toolsIntegrationPatterns.some(pattern => {
+        const regex = new RegExp(pattern, 'i')
+        return regex.test(q)
+      })
+    })
+    
+    if (hasToolsIntegrationQuestion) {
+      askedQuestionTopics.add('tools_integrations')
+    }
+    
+    // Enhanced semantic duplicate detection for complexity questions
+    // Check if any asked question is semantically similar to complexity questions
+    const complexityPatterns = [
+      'complex.*website',
+      'website.*complex',
+      'complex.*build',
+      'build.*complex',
+      'complex.*typical',
+      'typical.*complex',
+      'complex.*project',
+      'project.*complex',
+      'complexity.*website',
+      'website.*complexity',
+      'how.*complex',
+      'what.*complex',
+      'level.*complex',
+      'complex.*level',
+      'simple.*complex',
+      'complex.*simple',
+      'basic.*advanced',
+      'advanced.*basic',
+    ]
+    
+    const hasComplexityQuestion = askedQuestions.some(q => {
+      return complexityPatterns.some(pattern => {
+        const regex = new RegExp(pattern, 'i')
+        return regex.test(q)
+      })
+    })
+    
+    if (hasComplexityQuestion) {
+      askedQuestionTopics.add('complexity')
     }
     
     // Phase 5: Single pass: build messages for Claude API (only last 5 messages)
@@ -895,6 +1344,96 @@ export async function POST(request: NextRequest) {
                                (msg.content.toLowerCase().includes('uploaded files') || 
                                 msg.content.toLowerCase().includes('logo') ||
                                 msg.metadata?.questionText?.toLowerCase().includes('brand material'))))
+    
+    // Check if content management information already exists
+    const hasContentManagementInfo = 
+      intelligence?.contentReadiness || 
+      intelligence?.contentUpdateFrequency ||
+      intelligence?.contentManager ||
+      intelligence?.whoWillUpdate ||
+      (conversation && conversation.some((msg: any) => 
+        msg.role === 'user' && 
+        (msg.metadata?.questionText?.toLowerCase().includes('who will update') ||
+         msg.metadata?.questionText?.toLowerCase().includes('manage') ||
+         msg.metadata?.questionText?.toLowerCase().includes('maintain') ||
+         msg.metadata?.questionText?.toLowerCase().includes('content management'))))
+    
+    // Check if tools/integrations information already exists in intelligence
+    // CRITICAL: If user answered "None" or provided tools/integrations info, don't ask again
+    // Empty array [] means user answered "none" - still counts as answered
+    const hasToolsIntegrationsInfo = 
+      (intelligence?.integrations !== undefined && intelligence.integrations !== null) ||
+      (intelligence?.tools !== undefined && intelligence.tools !== null) ||
+      (intelligence?.currentTools !== undefined && intelligence.currentTools !== null) ||
+      (intelligence?.toolsUsed !== undefined && intelligence.toolsUsed !== null) ||
+      (intelligence?.externalTools !== undefined && intelligence.externalTools !== null) ||
+      (conversation && conversation.some((msg: any) => 
+        msg.role === 'user' && 
+        (msg.content?.toLowerCase().includes('none') || msg.content?.toLowerCase().includes('no tools')) && 
+        (msg.metadata?.questionText?.toLowerCase().includes('tools') ||
+         msg.metadata?.questionText?.toLowerCase().includes('integrate') ||
+         msg.metadata?.questionText?.toLowerCase().includes('external services') ||
+         msg.metadata?.questionText?.toLowerCase().includes('connect') ||
+         msg.metadata?.questionText?.toLowerCase().includes('what tools'))))
+    
+    // Check if user has indicated they don't use a CRM
+    // CRITICAL: If user said they don't use a CRM, don't ask about CRM integration or advanced lead tracking
+    // We're gathering website requirements, not selling CRM tools
+    const userDoesNotUseCRM = 
+      intelligence?.crmUsed === false ||
+      intelligence?.hasCrm === false ||
+      intelligence?.usesCrm === false ||
+      (intelligence?.crm && (intelligence.crm === 'none' || intelligence.crm === 'no' || intelligence.crm === false)) ||
+      (conversation && conversation.some((msg: any) => 
+        msg.role === 'user' && 
+        (msg.content?.toLowerCase().includes('no crm') || 
+         msg.content?.toLowerCase().includes('don\'t use crm') ||
+         msg.content?.toLowerCase().includes('do not use crm') ||
+         msg.content?.toLowerCase().includes('no, i don\'t') ||
+         msg.content?.toLowerCase().includes('none')) && 
+        (msg.metadata?.questionText?.toLowerCase().includes('crm') ||
+         msg.metadata?.questionText?.toLowerCase().includes('use crm'))))
+    
+    // Check if contact form information has already been gathered
+    // CRITICAL: If user has already answered questions about contact form (wanting one, what info to capture), don't ask more contact form questions
+    // Maximum 1-2 questions about contact forms - don't over-ask about the same feature
+    const hasContactFormInfo = 
+      intelligence?.contactForm !== undefined ||
+      intelligence?.hasContactForm !== undefined ||
+      intelligence?.formFields !== undefined ||
+      intelligence?.contactFormFields !== undefined ||
+      intelligence?.formInformation !== undefined ||
+      intelligence?.captureInformation !== undefined ||
+      (conversation && conversation.some((msg: any) => 
+        msg.role === 'user' && 
+        (msg.metadata?.questionText?.toLowerCase().includes('contact form') ||
+         msg.metadata?.questionText?.toLowerCase().includes('information you want') ||
+         msg.metadata?.questionText?.toLowerCase().includes('capture') ||
+         msg.metadata?.questionText?.toLowerCase().includes('form fields')))) ||
+      (askedQuestions.some(q => 
+        q.toLowerCase().includes('contact form') ||
+        q.toLowerCase().includes('information you want') ||
+        q.toLowerCase().includes('capture') ||
+        q.toLowerCase().includes('form fields')))
+    
+    // Check if portfolio information has already been gathered
+    // CRITICAL: If user has already indicated they want a portfolio section, don't ask follow-up questions about portfolio features
+    // Maximum 1 question about portfolio - don't over-ask about the same feature
+    const hasPortfolioInfo = 
+      intelligence?.hasPortfolio !== undefined ||
+      intelligence?.portfolio !== undefined ||
+      intelligence?.portfolioSection !== undefined ||
+      intelligence?.showcaseWork !== undefined ||
+      intelligence?.showcaseProjects !== undefined ||
+      (conversation && conversation.some((msg: any) => 
+        msg.role === 'user' && 
+        (msg.metadata?.questionText?.toLowerCase().includes('portfolio') ||
+         msg.metadata?.questionText?.toLowerCase().includes('showcase') ||
+         msg.metadata?.questionText?.toLowerCase().includes('view your portfolio')))) ||
+      (askedQuestions.some(q => 
+        q.toLowerCase().includes('portfolio') ||
+        q.toLowerCase().includes('showcase') ||
+        (q.toLowerCase().includes('view') && q.toLowerCase().includes('portfolio'))))
     
     // Count questions asked for Section 4 (Business Context)
     const section4Questions = questionsBySection['business_context'] || questionsBySection['section4'] || 0
@@ -970,6 +1509,8 @@ Example questions:
 - For project/campaign: "What's the name of your project?"
 - For nonprofit: "What's the name of your organization?"
 
+**CRITICAL: NEVER ask about security, SSL, compliance, or privacy features - these are handled automatically by Applicreations.**
+
 Respond with valid JSON matching the required format.
 `
       } else {
@@ -996,6 +1537,7 @@ Generate the FIRST question to gather business context information. The question
 9. **CRITICAL: Focus on CURRENT state, not future goals - users should answer immediately without thinking**
 10. **CRITICAL: ONE simple question only - no compound questions**
 11. **CRITICAL: Never ask about competitive positioning or "what makes you special"**
+12. **CRITICAL: NEVER ask about security, SSL, compliance, or privacy features - these are handled automatically by Applicreations**
 
 Respond with valid JSON matching the required format.
 `
@@ -1004,28 +1546,77 @@ Respond with valid JSON matching the required format.
       // Check if business name is still missing (shouldn't happen, but safety check)
       const hasBusinessName = intelligence?.businessName || intelligence?.companyName
       
+      const currentQuestionCount = questionCount || 0
+      const mustTriggerFeatures = currentQuestionCount >= 15
+      const shouldTriggerFeatures = currentQuestionCount >= 10
+      
+      // Check if we have minimum required information for feature screen
+      const hasBusinessNameForFeatures = hasBusinessName || intelligence?.businessName || intelligence?.companyName
+      const hasBusinessServices = hasServicesInfo || intelligence?.services || intelligence?.servicesOffered || intelligence?.primaryService
+      const hasTargetAudience = hasCustomerInfo || intelligence?.targetAudience
+      const hasPrimaryGoal = intelligence?.primaryGoal
+      const hasVisitorActions = intelligence?.visitorActions || intelligence?.visitorGoals || 
+                               (conversation && conversation.some((msg: any) => 
+                                 msg.role === 'user' && 
+                                 msg.metadata?.questionText?.toLowerCase().includes('visitor') && 
+                                 msg.metadata?.questionText?.toLowerCase().includes('able to do')))
+      const hasContentManagement = hasContentManagementInfo || intelligence?.contentReadiness || intelligence?.contentUpdateFrequency
+      const hasIntegrations = hasToolsIntegrationsInfo || intelligence?.integrations || intelligence?.tools
+      
+      const hasMinimumForFeatures = hasBusinessNameForFeatures && hasBusinessServices && hasTargetAudience && 
+                                   hasPrimaryGoal && (hasVisitorActions || hasContentManagement)
+      
       contextMessage = `
 ${foundationContext}
 ${topicClosureContext}
-State: ${questionCount || 0} questions asked
+State: ${currentQuestionCount} questions asked
 Intelligence: ${JSON.stringify(intelligence || {})}
 ${!hasBusinessName ? '\n**MISSING: Business name - ask FIRST**' : ''}
 ${isAnsweringBusinessName && !hasBusinessName ? '\n**EXTRACT business name from answer**' : ''}
+
+**CRITICAL: PACKAGE SELECTION SCREEN TRIGGER STATUS**
+Question Count: ${currentQuestionCount}
+${mustTriggerFeatures ? '🚨 **MANDATORY: You MUST use action: "select_packages" NOW - question count is >= 15 (package selection comes BEFORE features)**' : ''}
+${shouldTriggerFeatures && hasMinimumForFeatures ? '✅ **SHOULD trigger select_packages: question count >= 10 AND minimum info gathered**' : ''}
+${shouldTriggerFeatures && !hasMinimumForFeatures ? '⚠️ **Question count >= 10 but missing minimum info - gather essentials quickly then trigger**' : ''}
+
+**MINIMUM INFO CHECKLIST FOR FEATURE SCREEN:**
+- Business name: ${hasBusinessNameForFeatures ? '✓' : '✗'}
+- What business does: ${hasBusinessServices ? '✓' : '✗'}
+- Target audience: ${hasTargetAudience ? '✓' : '✗'}
+- Primary goal: ${hasPrimaryGoal ? '✓' : '✗'}
+- Visitor actions: ${hasVisitorActions ? '✓' : '✗'}
+- Content management: ${hasContentManagement ? '✓' : '✗'}
+- Integrations: ${hasIntegrations ? '✓' : '✗ (optional)'}
+
+**PREVIOUSLY ASKED QUESTIONS (DO NOT ASK THESE AGAIN):**
+${askedQuestions.length > 0 ? askedQuestions.map((q, i) => `${i + 1}. "${q}"`).join('\n') : 'None yet'}
 
 Topics: ${askedQuestionTopics.size > 0 ? Array.from(askedQuestionTopics).join(', ') : 'None'}
 Sections: ${Object.entries(questionsBySection).map(([s, c]) => `${s}:${c}`).join(', ') || 'None'}
 ${hasServicesInfo ? '\n**Services info exists - skip**' : ''}
 ${hasCustomerInfo ? '\n**Customer info exists - skip**' : ''}
 ${hasBrandMaterials ? '\n**Brand materials provided - skip**' : ''}
+${hasContentManagementInfo ? '\n**Content management info exists - skip content management questions**' : ''}
+${hasToolsIntegrationsInfo ? '\n**Tools/integrations info exists in intelligence - DO NOT ask about tools/integrations/external services again - skip**' : ''}
+${userDoesNotUseCRM ? '\n**CRITICAL: User does NOT use a CRM - DO NOT ask about CRM integration, lead tracking systems, or advanced lead management features - we are gathering website requirements, not selling CRM tools - skip all CRM-related questions**' : ''}
+${hasContactFormInfo ? '\n**CRITICAL: Contact form information already gathered - DO NOT ask more questions about contact forms (what info to capture, what to achieve, etc.) - maximum 1-2 questions about contact forms total - skip all additional contact form questions**' : ''}
+${hasPortfolioInfo ? '\n**CRITICAL: Portfolio information already gathered - user has indicated they want a portfolio section - DO NOT ask follow-up questions about portfolio features (what features, how to organize, etc.) - maximum 1 question about portfolio total - skip all additional portfolio questions**' : ''}
 ${askedQuestionTopics.has('brand_assets') ? '\n**Brand assets asked - skip**' : ''}
 ${askedQuestionTopics.has('design_style') ? '\n**Design style/aesthetic asked - skip**' : ''}
 ${askedQuestionTopics.has('services') ? '\n**Services asked - skip**' : ''}
 ${askedQuestionTopics.has('customers') ? '\n**Customers asked - skip**' : ''}
+${askedQuestionTopics.has('content') ? '\n**Content management asked - DO NOT ask again - skip**' : ''}
+${askedQuestionTopics.has('tools_integrations') ? '\n**Tools/integrations asked - DO NOT ask again - skip**' : ''}
+${askedQuestionTopics.has('complexity') ? '\n**Complexity/project complexity asked - DO NOT ask again - skip**' : ''}
 ${targetAudienceQuestions >= 1 ? `\n**Target audience: ${targetAudienceQuestions} question(s) - move on**` : ''}
 ${section4Questions >= 2 ? `\n**Section 4: ${section4Questions} questions - move on**` : ''}
 
-Task: Determine next SCOPE.md section, evaluate sufficiency, generate next question.
+Task: ${mustTriggerFeatures ? '🚨 MANDATORY: Use action: "select_packages" NOW - question count >= 15 (package selection comes BEFORE features)' : shouldTriggerFeatures && hasMinimumForFeatures ? '✅ Use action: "select_packages" - you have minimum info and question count >= 10' : 'Determine next SCOPE.md section, evaluate sufficiency, generate next question.'}
 Keep question SHORT (10-12 words), SIMPLE, DIRECT. ONE question only.
+**CRITICAL: NEVER ask duplicate questions - check the "PREVIOUSLY ASKED QUESTIONS" list above before generating a new question.**
+**CRITICAL: NEVER ask about security, SSL, compliance, or privacy features - these are handled automatically by Applicreations.**
+**CRITICAL: Focus on gathering functionality-related information quickly. Don't ask deep follow-ups - get essentials and move to feature screen.**
 Respond with valid JSON only.
 `
     }
@@ -1034,6 +1625,62 @@ Respond with valid JSON only.
     const estimateTokens = (text: string): number => {
       // Rough estimation: ~4 characters per token
       return Math.ceil(text.length / 4)
+    }
+    
+    // Helper function to calculate string similarity with synonym support
+    const calculateSimilarity = (str1: string, str2: string): number => {
+      const longer = str1.length > str2.length ? str1 : str2
+      const shorter = str1.length > str2.length ? str2 : str1
+      if (longer.length === 0) return 1.0
+      
+      // Synonym mapping for content management questions
+      const contentManagementSynonyms: Record<string, string[]> = {
+        'update': ['update', 'manage', 'maintain', 'edit', 'change', 'modify', 'handle'],
+        'content': ['content', 'website', 'site', 'pages', 'information', 'material'],
+        'who': ['who', 'how', 'what', 'which'],
+        'will': ['will', 'would', 'should', 'can', 'may'],
+      }
+      
+      // Normalize synonyms
+      const normalize = (text: string): string => {
+        let normalized = text.toLowerCase()
+        Object.entries(contentManagementSynonyms).forEach(([key, synonyms]) => {
+          synonyms.forEach(syn => {
+            const regex = new RegExp(`\\b${syn}\\b`, 'gi')
+            normalized = normalized.replace(regex, key)
+          })
+        })
+        return normalized
+      }
+      
+      const norm1 = normalize(str1)
+      const norm2 = normalize(str2)
+      
+      // Simple word-based similarity on normalized text
+      const words1 = norm1.split(/\s+/).filter(w => w.length > 2) // Filter out short words
+      const words2 = norm2.split(/\s+/).filter(w => w.length > 2)
+      const commonWords = words1.filter(w => words2.includes(w))
+      const totalWords = new Set([...words1, ...words2]).size
+      
+      if (totalWords === 0) return 0
+      const similarity = commonWords.length / totalWords
+      
+      // Also check if both questions are about content management (lower threshold for same topic)
+      const isContentManagement1 = str1.toLowerCase().includes('content') || 
+                                   str1.toLowerCase().includes('update') || 
+                                   str1.toLowerCase().includes('manage') || 
+                                   str1.toLowerCase().includes('maintain')
+      const isContentManagement2 = str2.toLowerCase().includes('content') || 
+                                   str2.toLowerCase().includes('update') || 
+                                   str2.toLowerCase().includes('manage') || 
+                                   str2.toLowerCase().includes('maintain')
+      
+      // If both are content management questions, use lower threshold (70% instead of 85%)
+      if (isContentManagement1 && isContentManagement2 && similarity > 0.70) {
+        return 0.90 // Treat as duplicate if similarity > 70% for content management questions
+      }
+      
+      return similarity
     }
     
     const systemPromptTokens = estimateTokens(CLAUDE_SYSTEM_PROMPT_V3_2)
@@ -1161,6 +1808,174 @@ Respond with valid JSON only.
     // Validate response structure
     if (!claudeResponse.action || !claudeResponse.sufficiency_evaluation) {
       throw new Error('Invalid response structure from Claude')
+    }
+
+    // CRITICAL: Enforce package selection screen trigger by question 15
+    // BUT: Only if packages haven't already been selected
+    // If questionCount >= 15 and Claude didn't trigger select_packages, force it
+    // UNLESS packages have already been selected (prevents re-triggering after feature selection)
+    const currentQuestionCount = questionCount || 0
+    const packagesAlreadySelected = selectedWebsitePackage !== null && selectedWebsitePackage !== undefined
+    const featuresAlreadySelected = featureSelection?.selectedFeatures && featureSelection.selectedFeatures.length > 0
+    
+    // Only force select_packages if:
+    // 1. Question count >= 15
+    // 2. Claude didn't return select_packages or recommend_features
+    // 3. Packages haven't been selected yet
+    if (currentQuestionCount >= 15 && 
+        claudeResponse.action !== 'select_packages' && 
+        claudeResponse.action !== 'recommend_features' &&
+        !packagesAlreadySelected) {
+      console.warn(`[PACKAGE TRIGGER ENFORCEMENT] Question count is ${currentQuestionCount} but Claude returned action: ${claudeResponse.action}. Forcing select_packages.`)
+      
+      // Return a forced select_packages response
+      // Note: This is a fallback - ideally Claude should handle this, but we enforce it as a safety measure
+      return NextResponse.json({
+        action: 'select_packages',
+        reasoning: `Question count reached ${currentQuestionCount}. Package selection screen must be triggered now.`,
+        sufficiency_evaluation: {
+          scope_section: 'Package Selection',
+          section_requirements: {},
+          current_information: 'Sufficient information gathered to select packages',
+          required_for_scope: 'Package selection needed before features',
+          is_sufficient: true,
+          reason: 'Question count limit reached',
+          implementation_impact: 'Package selection screen will be shown',
+          questions_in_section: currentQuestionCount,
+          within_depth_limit: true,
+          decision: 'select_packages'
+        },
+        intelligence: intelligence || {},
+        progress: {
+          percentage: Math.min(100, (currentQuestionCount / 20) * 100),
+          scope_sections_complete: [],
+          scope_sections_in_progress: [],
+          scope_sections_remaining: []
+        }
+      })
+    }
+    
+    // CRITICAL: Prevent re-triggering package selection if packages already selected
+    // Note: The frontend will also check and skip showing the screen if packages are already selected
+    // This is a defensive check - Claude shouldn't return select_packages if packages are already selected
+    if (claudeResponse.action === 'select_packages' && packagesAlreadySelected) {
+      console.warn(`[PACKAGE SELECTION PREVENTED] Claude returned select_packages but packages already selected. Frontend will handle skipping the screen.`)
+      // Let the response through - the frontend will check and skip showing the screen
+    }
+    
+    // CRITICAL: Prevent re-triggering feature selection if features already selected
+    // Note: The frontend will also check and skip showing the screen if features are already selected
+    // This is a defensive check - Claude shouldn't return recommend_features if features are already selected
+    if (claudeResponse.action === 'recommend_features' && featuresAlreadySelected) {
+      console.warn(`[FEATURE SELECTION PREVENTED] Claude returned recommend_features but features already selected. Frontend will handle skipping the screen.`)
+      // Let the response through - the frontend will check and skip showing the screen
+    }
+
+    // CRITICAL: Validate that no security-related questions are being asked
+    // Security, SSL, and compliance are handled automatically - never ask about them
+    if (claudeResponse.action === 'ask_question' && claudeResponse.content?.question?.text) {
+      const questionText = claudeResponse.content.question.text.toLowerCase()
+      
+      const securityKeywords = [
+        'security feature',
+        'security features',
+        'special security',
+        'ssl certificate',
+        'ssl certificates',
+        'protect customer information',
+        'secure online payment',
+        'secure online payments',
+        'european data privacy',
+        'data privacy compliance',
+        'healthcare information protection',
+        'gdpr',
+        'hipaa',
+        'pci',
+        'compliance requirement',
+        'compliance requirements',
+        'privacy feature',
+        'privacy features',
+        'data protection',
+        'payment security',
+        'secure payment',
+      ]
+      
+      const containsSecurityKeyword = securityKeywords.some(keyword => questionText.includes(keyword))
+      
+      if (containsSecurityKeyword) {
+        console.error('[SECURITY QUESTION REJECTED] Claude attempted to ask a security-related question:', questionText)
+        console.error('[SECURITY QUESTION REJECTED] Security, SSL, and compliance are handled automatically - these questions should never be asked')
+        
+        // Return error response indicating security question was rejected
+        return NextResponse.json(
+          {
+            error: 'Security question rejected',
+            details: 'Security, SSL certificates, and compliance are handled automatically by Applicreations. This question should not be asked.',
+            rejectedQuestion: questionText,
+            action: 'reject_security_question',
+          },
+          { status: 400 }
+        )
+      }
+      
+      // CRITICAL: Validate that no duplicate questions are being asked
+      const normalizedQuestionText = questionText.trim()
+      
+      // First check: Intelligence field check for content management
+      if (hasContentManagementInfo && (
+        questionText.includes('who will') || 
+        questionText.includes('how will') ||
+        questionText.includes('manage') ||
+        questionText.includes('maintain') ||
+        questionText.includes('update')
+      )) {
+        console.error('[DUPLICATE QUESTION REJECTED] Content management information already exists:', {
+          question: questionText,
+          intelligence: {
+            contentReadiness: intelligence?.contentReadiness,
+            contentUpdateFrequency: intelligence?.contentUpdateFrequency,
+            contentManager: intelligence?.contentManager,
+            whoWillUpdate: intelligence?.whoWillUpdate,
+          }
+        })
+        
+        return NextResponse.json(
+          {
+            error: 'Duplicate question rejected',
+            details: 'Content management information already exists in intelligence. This question has already been answered.',
+            rejectedQuestion: questionText,
+            reason: 'intelligence_field_exists',
+            action: 'reject_duplicate_question',
+          },
+          { status: 400 }
+        )
+      }
+      
+      // Second check: Exact match and semantic similarity
+      const isDuplicate = askedQuestions.some(askedQ => {
+        // Check for exact match (case-insensitive)
+        if (askedQ === normalizedQuestionText) return true
+        // Check for semantic similarity (questions that are very similar)
+        const similarity = calculateSimilarity(askedQ, normalizedQuestionText)
+        return similarity > 0.85 // 85% similarity threshold (or 70% for content management)
+      })
+      
+      if (isDuplicate) {
+        console.error('[DUPLICATE QUESTION REJECTED] Claude attempted to ask a duplicate question:', questionText)
+        console.error('[DUPLICATE QUESTION REJECTED] Previously asked questions:', askedQuestions)
+        
+        // Return error response indicating duplicate question was rejected
+        return NextResponse.json(
+          {
+            error: 'Duplicate question rejected',
+            details: 'This question has already been asked. Please generate a different question.',
+            rejectedQuestion: questionText,
+            previouslyAsked: askedQuestions,
+            action: 'reject_duplicate_question',
+          },
+          { status: 400 }
+        )
+      }
     }
 
     return NextResponse.json(claudeResponse)

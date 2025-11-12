@@ -54,10 +54,11 @@ export class ConversationAnimationController {
     }, TIMINGS.OPTION_SELECT_HIGHLIGHT)
     
     // Show processing indicator after exit animation completes
-    // Exit duration = QUESTION_FADE_START + QUESTION_FADE_DURATION
-    // Add extra buffer to ensure exit animation completes before hiding component
-    const exitDuration = TIMINGS.QUESTION_FADE_START + TIMINGS.QUESTION_FADE_DURATION
-    const processingDelay = TIMINGS.OPTION_SELECT_HIGHLIGHT + exitDuration + 50 // 50ms buffer
+    // CRITICAL FIX: Ensure exit animation has time to complete
+    // Exit animation duration = QUESTION_FADE_DURATION (500ms)
+    // Add buffer to ensure exit animation completes before transitioning to processing
+    const exitDuration = TIMINGS.QUESTION_FADE_DURATION
+    const processingDelay = TIMINGS.OPTION_SELECT_HIGHLIGHT + exitDuration + 100 // 100ms buffer for safety
     setTimeout(() => {
       this.state = {
         ...this.state,
