@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertCircle, CheckCircle2, Info, ChevronDown } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Info, ChevronDown, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { FeatureChip } from './FeatureChip'
 import { ScopeProgressPanel } from './ScopeProgressPanel'
 import { featureLibrary } from '@/lib/features/featureLibraryParser'
@@ -55,10 +56,85 @@ export function FeatureChipGrid({
     [intelligence]
   )
   
-  // Selected features state (pre-select recommended)
+  // Get package tier name in correct format
+  const packageTierName = useMemo(() => {
+    return selectedWebsitePackage === 'starter' ? 'Starter' :
+           selectedWebsitePackage === 'professional' ? 'Professional' :
+           selectedWebsitePackage === 'custom' ? 'Custom' : 
+           packageTier.charAt(0).toUpperCase() + packageTier.slice(1).toLowerCase()
+  }, [selectedWebsitePackage, packageTier])
+  
+  // State for search functionality
+  const [searchQuery, setSearchQuery] = useState('')
+  
+  // State for custom feature input
+  const [customFeatureDescription, setCustomFeatureDescription] = useState('')
+  const [showCustomFeatureInput, setShowCustomFeatureInput] = useState(false)
+  
+  // Get features included in base package for current package tier
+  const includedFeatureIds = useMemo(() => {
+    const allFeatures = Object.values(featuresByCategory).flat()
+    
+    if (!packageTierName) return []
+    
+    return allFeatures
+      .filter(feature => 
+        feature.pricing.type === 'included' && 
+        feature.pricing.tiers?.includes(packageTierName)
+      )
+      .map(feature => feature.id)
+  }, [featuresByCategory, packageTierName])
+  
+  // Get included features for display in calculator
+  const includedFeatures = useMemo(() => {
+    const allFeatures = Object.values(featuresByCategory).flat()
+    
+    if (!packageTierName) return []
+    
+    return allFeatures.filter(feature => 
+      feature.pricing.type === 'included' && 
+      feature.pricing.tiers?.includes(packageTierName)
+    )
+  }, [featuresByCategory, packageTierName])
+  
+  // Filter features based on search query
+  const filteredFeaturesByCategory = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return featuresByCategory
+    }
+    
+    const query = searchQuery.toLowerCase().trim()
+    const filtered: Record<string, Feature[]> = {}
+    
+    Object.entries(featuresByCategory).forEach(([category, features]) => {
+      const matchingFeatures = features.filter(feature => 
+        feature.name.toLowerCase().includes(query) ||
+        feature.description.toLowerCase().includes(query) ||
+        feature.tags?.some(tag => tag.toLowerCase().includes(query))
+      )
+      
+      if (matchingFeatures.length > 0) {
+        filtered[category] = matchingFeatures
+      }
+    })
+    
+    return filtered
+  }, [featuresByCategory, searchQuery])
+  
+  // Selected features state (pre-select recommended AND included features)
   const [selectedFeatures, setSelectedFeatures] = useState<Set<string>>(
-    new Set(recommendedFeatureIds)
+    new Set([...recommendedFeatureIds, ...includedFeatureIds])
   )
+  
+  // Ensure included features are always selected
+  useEffect(() => {
+    setSelectedFeatures(prev => {
+      const next = new Set(prev)
+      // Add all included features
+      includedFeatureIds.forEach(id => next.add(id))
+      return next
+    })
+  }, [includedFeatureIds])
   
   // Conflicts and dependencies
   const [conflicts, setConflicts] = useState<FeatureConflict[]>([])
@@ -68,10 +144,10 @@ export function FeatureChipGrid({
   const pricing = useMemo(() => {
     const featurePricing = featureLibrary.calculatePricing(
       Array.from(selectedFeatures),
-      packageTier
+      packageTierName
     )
     
-    // Add package base price
+    // Add package base price (always show, even if 0)
     const packageBasePrice = selectedWebsitePackage === 'starter' ? 1900 :
                              selectedWebsitePackage === 'professional' ? 3250 :
                              selectedWebsitePackage === 'custom' ? 5250 : 0
@@ -85,25 +161,35 @@ export function FeatureChipGrid({
     const hostingMonthly = selectedHostingPackage !== 'none' ? hostingPrices[selectedHostingPackage] : 0
     const hostingAnnual = hostingMonthly * 12
     
+    // Calculate addon features total (excluding included features)
+    const addonFeaturesTotal = featurePricing.addonFeatures.reduce((sum, f) => sum + (f.pricing.addonPrice || 0), 0)
+    const addonTotal = addonFeaturesTotal
+    
     return {
       ...featurePricing,
       packageBasePrice,
       hostingMonthly,
       hostingAnnual,
-      total: packageBasePrice + featurePricing.total + hostingAnnual
+      addonTotal,
+      total: packageBasePrice + addonTotal + hostingAnnual
     }
-  }, [selectedFeatures, packageTier, selectedWebsitePackage, selectedHostingPackage])
+  }, [selectedFeatures, packageTierName, selectedWebsitePackage, selectedHostingPackage])
   
   // Get feature selection limit for current package
   const maxFeatureSelections = useMemo(() => {
     return selectedWebsitePackage ? PACKAGE_FEATURE_LIMITS[selectedWebsitePackage] : null
   }, [selectedWebsitePackage])
   
-  // Check if limit is reached
+  // Count only addon features (exclude included features from count)
+  const addonFeatureCount = useMemo(() => {
+    return Array.from(selectedFeatures).filter(id => !includedFeatureIds.includes(id)).length
+  }, [selectedFeatures, includedFeatureIds])
+  
+  // Check if limit is reached (only count addon features)
   const isLimitReached = useMemo(() => {
     if (maxFeatureSelections === null) return false // Unlimited
-    return selectedFeatures.size >= maxFeatureSelections
-  }, [selectedFeatures.size, maxFeatureSelections])
+    return addonFeatureCount >= maxFeatureSelections
+  }, [addonFeatureCount, maxFeatureSelections])
   
   // Validate selection whenever it changes
   useEffect(() => {
@@ -127,14 +213,20 @@ export function FeatureChipGrid({
   }, [selectedFeatures])
   
   const handleToggle = (featureId: string) => {
+    // Don't allow toggling included features
+    if (includedFeatureIds.includes(featureId)) {
+      return
+    }
+    
     setSelectedFeatures(prev => {
       const next = new Set(prev)
       if (next.has(featureId)) {
         // Removing a feature - always allowed
         next.delete(featureId)
       } else {
-        // Adding a feature - check limit
-        if (maxFeatureSelections !== null && next.size >= maxFeatureSelections) {
+        // Adding a feature - check limit (only count addon features)
+        const currentAddonCount = Array.from(next).filter(id => !includedFeatureIds.includes(id)).length
+        if (maxFeatureSelections !== null && currentAddonCount >= maxFeatureSelections) {
           // Limit reached - don't add
           return prev
         }
@@ -150,12 +242,14 @@ export function FeatureChipGrid({
       return
     }
     
-    // Validate feature limit
-    if (maxFeatureSelections !== null && selectedFeatures.size > maxFeatureSelections) {
+    // Validate feature limit (only count addon features)
+    const addonCount = Array.from(selectedFeatures).filter(id => !includedFeatureIds.includes(id)).length
+    if (maxFeatureSelections !== null && addonCount > maxFeatureSelections) {
       // This shouldn't happen due to UI enforcement, but check anyway
       return
     }
     
+    // Submit all selected features (including included ones)
     if (selectedFeatures.size > 0) {
       onSubmit(Array.from(selectedFeatures))
     }
@@ -165,7 +259,7 @@ export function FeatureChipGrid({
     selectedFeatures.size > 0 &&
     conflicts.length === 0 &&
     dependencyIssues.length === 0 &&
-    (maxFeatureSelections === null || selectedFeatures.size <= maxFeatureSelections) &&
+    (maxFeatureSelections === null || addonFeatureCount <= maxFeatureSelections) &&
     !isSubmitting
   
   // Category display order
@@ -199,164 +293,41 @@ export function FeatureChipGrid({
   const [isCalculatorExpanded, setIsCalculatorExpanded] = useState(true)
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4">
-      {/* 3-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
-        {/* Left Column - Progress Panel (1/3) */}
-        <div className="lg:col-span-4">
-          {scopeProgress && (
-            <div className="sticky top-4">
-              <ScopeProgressPanel
-                progress={scopeProgress}
-                variant="compact"
-                collapsible
-                defaultExpanded={false}
-                answeredQuestions={answeredQuestions}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Middle Column - Features (1/3) */}
-        <div className="lg:col-span-4 space-y-4">
-          {/* Validation alerts */}
-          <AnimatePresence>
-            {isLimitReached && maxFeatureSelections !== null && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-3 bg-blue-50 border border-blue-200 rounded-lg"
-              >
-                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="text-sm font-medium text-blue-900 mb-1">Feature Selection Limit Reached</h3>
-                    <p className="text-xs text-blue-700">
-                      You've reached the maximum of {maxFeatureSelections} feature selection{maxFeatureSelections !== 1 ? 's' : ''} for the {selectedWebsitePackage === 'starter' ? 'Starter' : 'Professional'} package.
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-            
-            {conflicts.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-lg"
-              >
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="text-sm font-medium text-red-900 mb-1">Feature Conflicts Detected</h3>
-                    <ul className="space-y-1 text-xs text-red-700">
-                      {conflicts.map((conflict, idx) => (
-                        <li key={idx}>
-                          {featureLibrary.getFeature(conflict.featureA)?.name} and{' '}
-                          {featureLibrary.getFeature(conflict.featureB)?.name}: {conflict.reason}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-            
-            {dependencyIssues.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg"
-              >
-                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="text-sm font-medium text-yellow-900 mb-1">Missing Dependencies</h3>
-                    <ul className="space-y-1 text-xs text-yellow-700">
-                      {dependencyIssues.map((issue, idx) => (
-                        <li key={idx}>{issue}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          
-          {/* Feature categories */}
-          <div className="space-y-4">
-            {categoryOrder.map(categoryKey => {
-              const features = featuresByCategory[categoryKey as keyof typeof featuresByCategory]
-              if (!features || features.length === 0) return null
-              
-              return (
-                <motion.div
-                  key={categoryKey}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    {categoryLabels[categoryKey] || categoryKey}
-                    <span className="text-xs font-normal text-gray-500">
-                      ({features.length})
-                    </span>
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 gap-2">
-                    {features.map((feature, idx) => (
-                      <motion.div
-                        key={feature.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.03 }}
-                      >
-                        <FeatureChip
-                          feature={feature}
-                          isSelected={selectedFeatures.has(feature.id)}
-                          isRecommended={recommendedFeatureIds.includes(feature.id)}
-                          packageTier={packageTier}
-                          onToggle={handleToggle}
-                          disabled={isSubmitting || (isLimitReached && !selectedFeatures.has(feature.id))}
-                        />
-                      </motion.div>
-                    ))}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Right Column - Calculator (1/3) */}
-        <div className="lg:col-span-4">
+    <div className="w-full max-w-7xl mx-auto px-3 py-2">
+      {/* 2-column layout: Calculator/Progress on LEFT, Features on RIGHT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        {/* Left Column - Pricing Calculator & Progress Panel (positioned FIRST/LEFT) */}
+        <div className="lg:col-span-4 space-y-2 order-1 lg:sticky lg:top-4 lg:self-start">
+          {/* Pricing Calculator - Compact */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="sticky top-4 z-20"
+            className="z-20"
           >
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-              {/* Collapsible header */}
+              {/* Compact header */}
               <button
                 onClick={() => setIsCalculatorExpanded(!isCalculatorExpanded)}
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
               >
-                <div className="text-left">
-                  <div className="text-xs text-gray-600 mb-0.5">
-                    {selectedFeatures.size} {selectedFeatures.size === 1 ? 'feature' : 'features'} selected
-                    {maxFeatureSelections !== null && (
-                      <span className="text-gray-500"> / {maxFeatureSelections} max</span>
-                    )}
-                  </div>
-                  <div className="text-xl font-bold text-gray-900">
+                <div className="text-left flex-1 min-w-0">
+                  {pricing.packageBasePrice > 0 && (
+                    <div className="text-sm text-gray-600 mb-1 truncate">
+                      Starter Website
+                    </div>
+                  )}
+                  <div className="text-2xl font-bold text-gray-900">
                     ${pricing.total.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {addonFeatureCount} add-on{addonFeatureCount !== 1 ? 's' : ''}
+                    {maxFeatureSelections !== null && (
+                      <span> / {maxFeatureSelections} max</span>
+                    )}
                   </div>
                 </div>
                 <ChevronDown 
-                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                  className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 ${
                     isCalculatorExpanded ? 'rotate-180' : ''
                   }`}
                 />
@@ -372,58 +343,57 @@ export function FeatureChipGrid({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-3 pb-3 space-y-3 border-t border-gray-200">
-                      {pricing.bundleDiscount > 0 && (
-                        <div className="pt-3">
-                          <div className="text-xs text-green-600 font-medium mb-1">
-                            ${pricing.bundleDiscount.toLocaleString()} bundle savings!
-                          </div>
-                          {pricing.appliedBundles.length > 0 && (
-                            <div className="text-xs text-gray-500">
-                              {pricing.appliedBundles.map(b => b.name).join(', ')}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Breakdown */}
-                      <div className="space-y-1.5 text-xs">
+                    <div className="px-1.5 pb-1.5 space-y-1 border-t border-gray-200">
+                      {/* Compact Breakdown */}
+                      <div className="space-y-1 text-[10px]">
                         {pricing.packageBasePrice > 0 && (
                           <div className="flex justify-between text-gray-600">
-                            <span>Website Package:</span>
-                            <span>${pricing.packageBasePrice.toLocaleString()}</span>
+                            <span>Starter Website:</span>
+                            <span className="font-semibold">${pricing.packageBasePrice.toLocaleString()}</span>
                           </div>
                         )}
+                        
+                        {/* Included Features */}
+                        {includedFeatures.length > 0 && (
+                          <div className="pt-1 border-t border-gray-100">
+                            <div className="text-[9px] text-gray-500 font-medium mb-0.5">Included Features:</div>
+                            {includedFeatures.map((feature) => (
+                              <div key={feature.id} className="flex justify-between items-center group">
+                                <span className="text-gray-600 flex-1 min-w-0 break-words">{feature.name}</span>
+                                <span className="text-green-600 font-medium ml-2 flex-shrink-0 text-[9px]">
+                                  Included
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
                         {pricing.addonFeatures.length > 0 && (
-                          <div className="flex justify-between text-gray-600">
-                            <span>Add-ons:</span>
-                            <span>${pricing.subtotal.toLocaleString()}</span>
-                          </div>
+                          <>
+                            <div className="pt-1 border-t border-gray-100">
+                              <div className="text-[9px] text-gray-500 font-medium mb-0.5">Add-on Features:</div>
+                              {pricing.addonFeatures.map((feature) => (
+                                <div key={feature.id} className="flex justify-between items-center group">
+                                  <span className="text-gray-600 flex-1 min-w-0 break-words">{feature.name}</span>
+                                  <span className="text-gray-600 font-medium ml-2 flex-shrink-0">
+                                    ${(feature.pricing.addonPrice || 0).toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-gray-700 font-medium pt-0.5 border-t border-gray-100 mt-0.5">
+                                <span>Add-ons Total:</span>
+                                <span>${pricing.addonTotal.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </>
                         )}
-                        {pricing.bundleDiscount > 0 && (
-                          <div className="flex justify-between text-green-600">
-                            <span>Bundle discount:</span>
-                            <span>-${pricing.bundleDiscount.toLocaleString()}</span>
-                          </div>
-                        )}
+                        
                         {pricing.hostingAnnual > 0 && (
-                          <div className="flex justify-between text-gray-600">
-                            <span>Hosting (Annual):</span>
+                          <div className="flex justify-between text-gray-600 pt-1 border-t border-gray-100">
+                            <span>Hosting:</span>
                             <span>${pricing.hostingAnnual.toLocaleString()}</span>
                           </div>
                         )}
-                      </div>
-                      
-                      {/* Continue button */}
-                      <div className="pt-2">
-                        <Button
-                          onClick={handleSubmit}
-                          disabled={!canSubmit}
-                          className="w-full"
-                          size="sm"
-                        >
-                          {isSubmitting ? 'Submitting...' : 'Continue'}
-                        </Button>
                       </div>
                     </div>
                   </motion.div>
@@ -432,8 +402,190 @@ export function FeatureChipGrid({
             </div>
           </motion.div>
         </div>
+
+        {/* Right Column - Features (positioned SECOND/RIGHT) */}
+        <div className="lg:col-span-8 space-y-2 order-2">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-1.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+            <Input
+              type="text"
+              placeholder="Search features..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="!pl-9 pr-4 py-2 text-sm"
+            />
+          </div>
+          
+          {/* Custom Feature Input */}
+          {!showCustomFeatureInput ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p className="text-sm text-gray-700 mb-2">
+                Can't find what you're looking for?
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCustomFeatureInput(true)}
+                className="w-full"
+              >
+                Describe what you want and we'll create a custom feature just for you
+              </Button>
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Create your own feature
+              </label>
+              <Input
+                type="text"
+                placeholder="Describe the feature you need..."
+                value={customFeatureDescription}
+                onChange={(e) => setCustomFeatureDescription(e.target.value)}
+                className="w-full"
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowCustomFeatureInput(false)
+                    setCustomFeatureDescription('')
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    // TODO: Handle custom feature submission
+                    console.log('Custom feature:', customFeatureDescription)
+                    setShowCustomFeatureInput(false)
+                    setCustomFeatureDescription('')
+                  }}
+                  disabled={!customFeatureDescription.trim()}
+                >
+                  Submit
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Compact Validation alerts */}
+          <AnimatePresence>
+            {isLimitReached && maxFeatureSelections !== null && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-1.5 bg-blue-50 border border-blue-200 rounded text-[10px]"
+              >
+                <div className="flex items-start gap-1.5">
+                  <Info className="w-3 h-3 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-blue-700">
+                    Limit reached: {maxFeatureSelections} add-on{maxFeatureSelections !== 1 ? 's' : ''} max for {selectedWebsitePackage === 'starter' ? 'Starter' : selectedWebsitePackage === 'professional' ? 'Professional' : 'Custom'} package.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+            
+            {conflicts.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-1.5 bg-red-50 border border-red-200 rounded text-[10px]"
+              >
+                <div className="flex items-start gap-1.5">
+                  <AlertCircle className="w-3 h-3 text-red-600 flex-shrink-0 mt-0.5" />
+                  <ul className="space-y-0.5 text-red-700">
+                    {conflicts.map((conflict, idx) => (
+                      <li key={idx}>
+                        {featureLibrary.getFeature(conflict.featureA)?.name} & {featureLibrary.getFeature(conflict.featureB)?.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </motion.div>
+            )}
+            
+            {dependencyIssues.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-1.5 bg-yellow-50 border border-yellow-200 rounded text-[10px]"
+              >
+                <div className="flex items-start gap-1.5">
+                  <Info className="w-3 h-3 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <ul className="space-y-0.5 text-yellow-700">
+                    {dependencyIssues.map((issue, idx) => (
+                      <li key={idx}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
+          {/* Feature categories - Show filtered features */}
+          <div className="space-y-1.5">
+            {categoryOrder.map(categoryKey => {
+              const features = filteredFeaturesByCategory[categoryKey as keyof typeof filteredFeaturesByCategory]
+              if (!features || features.length === 0) return null
+              
+              return (
+                <motion.div
+                  key={categoryKey}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <h3 className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                    {categoryLabels[categoryKey] || categoryKey}
+                    <span className="text-[10px] font-normal text-gray-500">
+                      ({features.length})
+                    </span>
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                    {features.map((feature, idx) => (
+                      <motion.div
+                        key={feature.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: idx * 0.01 }}
+                      >
+                        <FeatureChip
+                          feature={feature}
+                          isSelected={selectedFeatures.has(feature.id)}
+                          isRecommended={recommendedFeatureIds.includes(feature.id)}
+                          packageTier={packageTierName}
+                          onToggle={handleToggle}
+                          disabled={isSubmitting || includedFeatureIds.includes(feature.id) || (isLimitReached && !selectedFeatures.has(feature.id))}
+                        />
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+
+      </div>
+      
+      {/* Continue Button - Bottom of Page */}
+      <div className="mt-6 pb-4 flex justify-center">
+        <Button
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+          size="lg"
+          className="min-w-[200px]"
+        >
+          {isSubmitting ? 'Submitting...' : 'Continue'}
+        </Button>
       </div>
     </div>
   )
 }
-

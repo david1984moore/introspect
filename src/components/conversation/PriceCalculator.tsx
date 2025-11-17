@@ -55,9 +55,9 @@ export function PriceCalculator({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="sticky bottom-0 bg-white border-t-2 border-gray-200 shadow-lg rounded-t-lg p-6 z-30"
+      className="bg-white border border-gray-200 shadow-sm rounded-lg p-6"
     >
-      <div className="max-w-4xl mx-auto">
+      <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Price Summary
         </h3>

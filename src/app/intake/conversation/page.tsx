@@ -13,16 +13,18 @@ import { FeatureSelectionScreen } from '@/components/FeatureSelectionScreen'
 import { StartOverModal } from '@/components/StartOverModal'
 import { QuestionDisplay } from '@/components/conversation/QuestionDisplay'
 import { FeatureChipGrid } from '@/components/conversation/FeatureChipGrid'
-import { PackageSelectionScreen } from '@/components/conversation/PackageSelectionScreen'
+import { PackageSelectionScreen, WEBSITE_PACKAGES, HOSTING_PACKAGES } from '@/components/conversation/PackageSelectionScreen'
 import { ValidationRouter } from '@/components/conversation/ValidationRouter'
 import { ScopeProgressPanel } from '@/components/conversation/ScopeProgressPanel'
 import { MobileProgressHeader } from '@/components/conversation/MobileProgressHeader'
 import { ProcessingIndicator } from '@/components/conversation/ProcessingIndicator'
 import { AmbientBackground } from '@/components/conversation/AmbientBackground'
+import { PriceCalculator } from '@/components/conversation/PriceCalculator'
 import { ConversationAnimationController } from '@/lib/conversationAnimationState'
 import { TIMINGS, EASINGS } from '@/lib/animationTimings'
 import { useContextDisplay } from '@/hooks/useContextDisplay'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { featureLibrary } from '@/lib/features/featureLibraryParser'
 import type { QuestionOption, ConversationIntelligence } from '@/types/conversation'
 import { FileUpload, type UploadedFile } from '@/components/conversation/FileUpload'
 
@@ -106,6 +108,31 @@ export default function ConversationPage() {
   
   // Get package tier for feature pricing
   const currentPackageTier = packageTier || calculatePackageTier()
+
+  // Calculate feature pricing for PriceCalculator
+  const featurePricing = useMemo(() => {
+    if (!featureSelection?.selectedFeatures || featureSelection.selectedFeatures.length === 0) {
+      return 0
+    }
+    
+    // Get package tier name
+    const packageTierName = selectedWebsitePackage === 'starter' ? 'Starter' :
+                           selectedWebsitePackage === 'professional' ? 'Professional' :
+                           selectedWebsitePackage === 'custom' ? 'Custom' : 
+                           currentPackageTier.charAt(0).toUpperCase() + currentPackageTier.slice(1).toLowerCase()
+    
+    // Calculate pricing using featureLibrary
+    const pricingResult = featureLibrary.calculatePricing(
+      featureSelection.selectedFeatures,
+      packageTierName
+    )
+    
+    // Calculate total addon features cost (excluding included features)
+    const addonFeaturesTotal = pricingResult.addonFeatures.reduce((sum, f) => sum + (f.pricing.addonPrice || 0), 0)
+    const addonTotal = addonFeaturesTotal
+    
+    return addonTotal
+  }, [featureSelection?.selectedFeatures, selectedWebsitePackage, currentPackageTier])
 
   // Check if current question is a file upload question (brand materials)
   const isFileUploadQuestion = currentQuestion && currentQuestion.inputType === 'file_upload'
@@ -588,33 +615,42 @@ export default function ConversationPage() {
       {/* Desktop Header */}
       {!isMobile && (
         <div className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-6 py-2">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <h1 className="text-lg font-semibold text-gray-900">
                   Welcome back, {userName}
                 </h1>
                 {!isPackageSelectionMode && (
-                  <p className="text-sm text-gray-600">
+                  <p className="text-xs text-gray-600">
                     Let's build your {websiteType} website
                   </p>
                 )}
               </div>
-              {isPackageSelectionMode && (
-                <div className="flex-1 flex justify-center">
-                  <h2 className="text-lg font-bold text-gray-900">
-                    Website & Hosting Package Selection
-                  </h2>
-                </div>
-              )}
+              
+              {/* Progress Bar - Center of Header */}
+              <div className="flex-1 flex justify-center">
+                {scopeProgress && (
+                  <div className="w-full max-w-md">
+                    <ScopeProgressPanel
+                      progress={scopeProgress}
+                      variant="minimal"
+                      collapsible={false}
+                      defaultExpanded={false}
+                      answeredQuestions={getAllFacts()}
+                    />
+                  </div>
+                )}
+              </div>
+              
               <div className="flex items-center gap-4">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowStartOverModal(true)}
-                  className="text-gray-600 hover:text-gray-900 hover:bg-red-100"
+                  className="text-gray-600 hover:text-gray-900 hover:bg-red-100 text-xs"
                 >
-                  <RotateCcw className="h-4 w-4 mr-2" />
+                  <RotateCcw className="h-3 w-3 mr-1.5" />
                   Start Over
                 </Button>
               </div>
@@ -629,6 +665,17 @@ export default function ConversationPage() {
         {isDesktop && scopeProgress && !isFeatureSelectionMode && (
           <aside className="col-span-4">
             <div className="sticky top-8 space-y-6">
+              {/* Pricing Calculator - Above Progress Bar */}
+              {(selectedWebsitePackage || (featureSelection?.selectedFeatures && featureSelection.selectedFeatures.length > 0)) && (
+                <PriceCalculator
+                  websitePackage={selectedWebsitePackage}
+                  hostingPackage={selectedHostingPackage}
+                  websitePackages={WEBSITE_PACKAGES}
+                  hostingPackages={HOSTING_PACKAGES}
+                  selectedFeatures={featureSelection?.selectedFeatures || []}
+                  featurePricing={featurePricing}
+                />
+              )}
               <ScopeProgressPanel
                 progress={scopeProgress}
                 variant="compact"

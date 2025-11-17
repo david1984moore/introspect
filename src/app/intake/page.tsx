@@ -444,24 +444,40 @@ export default function FoundationForm() {
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-2">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">
+              <h1 className="text-lg font-semibold text-gray-900">
                 {userName && currentStep > 1 ? `Welcome back, ${userName}` : 'Let\'s get started'}
               </h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-xs text-gray-600">
                 {websiteType ? `Building your ${websiteType} website` : 'Tell us about your project'}
               </p>
             </div>
+            
+            {/* Progress Bar - Center of Header */}
+            <div className="flex-1 flex justify-center">
+              {scopeProgress && (
+                <div className="w-full max-w-md">
+                  <ScopeProgressPanel
+                    progress={scopeProgress}
+                    variant="minimal"
+                    collapsible={false}
+                    defaultExpanded={false}
+                    answeredQuestions={getAllFacts()}
+                  />
+                </div>
+              )}
+            </div>
+            
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowStartOverModal(true)}
-                className="text-gray-600 hover:text-gray-900"
+                className="text-gray-600 hover:text-gray-900 text-xs"
               >
-                <RotateCcw className="h-4 w-4 mr-2" />
+                <RotateCcw className="h-3 w-3 mr-1.5" />
                 Start Over
               </Button>
             </div>

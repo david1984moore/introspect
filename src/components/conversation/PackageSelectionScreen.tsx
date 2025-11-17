@@ -37,7 +37,7 @@ interface PackageSelectionScreenProps {
   isSubmitting?: boolean
 }
 
-const WEBSITE_PACKAGES: WebsitePackageOption[] = [
+export const WEBSITE_PACKAGES: WebsitePackageOption[] = [
   {
     id: 'starter',
     name: 'Starter Website',
@@ -95,7 +95,7 @@ const WEBSITE_PACKAGES: WebsitePackageOption[] = [
   }
 ]
 
-const HOSTING_PACKAGES: HostingPackageOption[] = [
+export const HOSTING_PACKAGES: HostingPackageOption[] = [
   {
     id: 'basic',
     name: 'Basic',
