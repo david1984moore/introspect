@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PriceCalculator } from './PriceCalculator'
@@ -19,6 +19,7 @@ export interface WebsitePackageOption {
   basePrice: number | null // null for Custom
   features: string[]
   popular?: boolean
+  maxFeatureSelections: number | null // null means unlimited (for Custom)
 }
 
 export interface HostingPackageOption {
@@ -41,15 +42,17 @@ const WEBSITE_PACKAGES: WebsitePackageOption[] = [
     id: 'starter',
     name: 'Starter Website',
     subtitle: 'Perfect for small businesses',
-    description: 'A professional 5-page website that gets you online fast.',
-    basePrice: 2500,
+    description: 'A professional website with up to 5-pages.',
+    basePrice: 1900,
+    maxFeatureSelections: 3,
     features: [
-      '5 custom pages',
+      'Up to 5 custom pages',
       'Mobile-responsive design',
       'SEO optimization',
       'Contact form',
       'Google Analytics',
-      '30 days support*'
+      '30 days support*',
+      '3 feature selections'
     ]
   },
   {
@@ -57,7 +60,8 @@ const WEBSITE_PACKAGES: WebsitePackageOption[] = [
     name: 'Professional Website',
     subtitle: 'Best value for growing businesses',
     description: 'Everything you need to compete online and capture leads.',
-    basePrice: 4500,
+    basePrice: 3250,
+    maxFeatureSelections: 5,
     features: [
       'Up to 8 custom pages',
       'Advanced SEO setup',
@@ -66,7 +70,8 @@ const WEBSITE_PACKAGES: WebsitePackageOption[] = [
       'CMS for easy updates',
       'Social media integration',
       '60 days support*',
-      'Performance optimization'
+      'Performance optimization',
+      '5 feature selections'
     ],
     popular: true
   },
@@ -75,16 +80,17 @@ const WEBSITE_PACKAGES: WebsitePackageOption[] = [
     name: 'Custom Web App',
     subtitle: 'Built for your needs',
     description: 'Complex applications with custom functionality.',
-    basePrice: null,
+    basePrice: 5250,
+    maxFeatureSelections: 8, // 8 features included in base price
     features: [
       'Unlimited pages',
-      'Custom features',
       'Database integration',
       'User authentication',
       'API development',
       'Cloud hosting setup',
       '90 days support',
-      'Ongoing maintenance available'
+      'Ongoing maintenance available',
+      '8 feature selections'
     ]
   }
 ]
@@ -244,9 +250,9 @@ export function PackageSelectionScreen({
   return (
     <div className="max-w-7xl mx-auto px-6 py-0">
       {/* Website Packages */}
-      <div className="mb-10">
-        {/* GRID CONTAINER - items-start prevents cards from stretching to match tallest card */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+      <div className="mb-8">
+        {/* VERTICAL STACK - Horizontal cards stacked vertically */}
+        <div className="flex flex-col gap-4">
           {WEBSITE_PACKAGES.map((pkg) => {
             const isSelected = selectedWebsitePackage === pkg.id
             // Read expanded state for THIS SPECIFIC CARD ONLY from the Record
@@ -263,14 +269,14 @@ export function PackageSelectionScreen({
                 className="h-auto"
               >
                 <Card
-                  className={`transition-all flex flex-col relative overflow-hidden ${
+                  className={`transition-all flex flex-col relative ${
                     isSelected
                       ? 'border-2 border-blue-500 shadow-md'
                       : 'border border-gray-200 hover:border-gray-300'
                   } ${pkg.popular ? 'border-green-500 border-2' : ''}`}
                 >
                   {pkg.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap z-10">
+                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap z-30">
                       Most Popular
                     </div>
                   )}
@@ -281,7 +287,8 @@ export function PackageSelectionScreen({
                     onClick={(e) => {
                       e.stopPropagation()
                       e.preventDefault()
-                      setSelectedWebsitePackage(pkg.id)
+                      // Toggle selection - allow unselecting
+                      setSelectedWebsitePackage(isSelected ? null : pkg.id)
                     }}
                     onMouseDown={(e) => {
                       e.stopPropagation()
@@ -297,18 +304,17 @@ export function PackageSelectionScreen({
                           <CheckCircle2 className="w-3 h-3 text-white" />
                         )}
                       </div>
-                      <div className="absolute right-0 top-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                      <div className="absolute right-0 top-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-30">
                         <div className="bg-gray-900 text-white text-xs px-2 py-1 rounded shadow-lg">
-                          Select this package
+                          {isSelected ? 'Unselect' : 'Select this package'}
                         </div>
-                        <div className="absolute right-1.5 -top-1 w-1.5 h-1.5 bg-gray-900 rotate-45"></div>
                       </div>
                     </div>
                   </div>
                   
-                  {/* Collapsed State - Always Visible */}
+                  {/* Collapsed State - Horizontal Layout */}
                   <div 
-                    className="cursor-pointer flex-1 flex flex-col"
+                    className="cursor-pointer flex-1"
                     onClick={(e) => {
                       // CRITICAL: Stop all event propagation immediately to prevent parent handlers
                       e.stopPropagation()
@@ -338,19 +344,23 @@ export function PackageSelectionScreen({
                       e.preventDefault()
                     }}
                   >
-                    <CardHeader className="p-5 flex-1 flex flex-col justify-center min-h-[140px]">
-                      <div className="pr-8">
-                        <CardTitle className="text-lg font-bold text-gray-900 mb-3">
+                    <CardHeader className="p-4 flex-1 flex flex-row items-center justify-between min-h-[80px]">
+                      <div className="flex-1 pr-10">
+                        <CardTitle className="text-lg font-bold text-gray-900 mb-1">
                           {pkg.name}
                         </CardTitle>
-                        <div>
+                        <p className="text-sm text-gray-600 mb-1">{pkg.description}</p>
+                        <p className="text-sm text-gray-600">{pkg.subtitle}</p>
+                      </div>
+                      <div className="flex items-center gap-4 pr-14">
+                        <div className="text-right min-w-[120px]">
                           {pkg.basePrice !== null ? (
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-2xl font-bold text-gray-900">
+                            <>
+                              <div className="text-xs text-gray-500 mb-0.5">Starting at</div>
+                              <div className="text-2xl font-bold text-gray-900">
                                 ${pkg.basePrice.toLocaleString()}
-                              </span>
-                              <span className="text-xs text-gray-500">one-time</span>
-                            </div>
+                              </div>
+                            </>
                           ) : (
                             <div className="text-2xl font-bold text-gray-900">
                               Custom
@@ -360,16 +370,6 @@ export function PackageSelectionScreen({
                       </div>
                     </CardHeader>
                   </div>
-
-                  {/* Selected Indicator - Show when collapsed and selected */}
-                  {!isExpanded && isSelected && (
-                    <div className="px-5 pb-4">
-                      <div className="flex items-center justify-center gap-1.5 text-blue-600 font-medium text-xs pt-3 border-t border-gray-200">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Selected</span>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Expanded State - Animated */}
                   <AnimatePresence>
@@ -382,36 +382,79 @@ export function PackageSelectionScreen({
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <CardContent className="px-5 pb-5 pt-0">
-                          <p className="text-sm text-blue-600 font-medium mb-2">
-                            {pkg.subtitle}
-                          </p>
-                          <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                            {pkg.description}
-                          </p>
-                          
-                          <ul className="space-y-2 mb-4">
-                            {pkg.features.map((feature, idx) => (
-                              <li key={idx} className="flex items-start gap-2.5 text-sm text-gray-700">
-                                <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                                <span className="leading-relaxed">{feature}</span>
-                              </li>
-                            ))}
-                          </ul>
+                        <CardContent className="px-4 pb-4 pt-0 border-t border-gray-200">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3 mt-3">
+                            {/* Left column - first half of features */}
+                            <div className="space-y-1.5">
+                              {pkg.features.slice(0, Math.ceil(pkg.features.length / 2)).map((feature, idx) => {
+                                const isFeatureSelection = feature.toLowerCase().includes('feature selection')
+                                return (
+                                  <div key={`left-${idx}`}>
+                                    <div className="flex items-start gap-2 text-sm text-gray-700">
+                                      <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <Check className="w-3 h-3 text-white" />
+                                      </div>
+                                      <span className="leading-relaxed font-bold">{feature}</span>
+                                    </div>
+                                    {isFeatureSelection && (
+                                      <p className="text-xs text-gray-500 -mt-1 ml-6 leading-relaxed">
+                                        {pkg.id === 'custom' ? (
+                                          <>*8 features are included in the base custom price. <span style={{ fontWeight: 'bold' }}>Additional features are PRICED SEPARATELY and added to the base price.</span></>
+                                        ) : pkg.maxFeatureSelections !== null ? (
+                                          <>Select your features (up to {pkg.maxFeatureSelections}) in the next step. <span style={{ fontWeight: 'bold' }}>Each feature is PRICED SEPARATELY and added to the base price.</span></>
+                                        ) : (
+                                          <>Select your features in the next step. <span style={{ fontWeight: 'bold' }}>Each feature is PRICED SEPARATELY and added to the base price.</span></>
+                                        )}
+                                      </p>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            {/* Right column - second half of features */}
+                            <div className="space-y-1.5">
+                              {pkg.features.slice(Math.ceil(pkg.features.length / 2)).map((feature, idx) => {
+                                const originalIdx = Math.ceil(pkg.features.length / 2) + idx
+                                const isFeatureSelection = feature.toLowerCase().includes('feature selection')
+                                return (
+                                  <div key={`right-${originalIdx}`}>
+                                    <div className="flex items-start gap-2 text-sm text-gray-700">
+                                      <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <Check className="w-3 h-3 text-white" />
+                                      </div>
+                                      <span className="leading-relaxed font-bold">{feature}</span>
+                                    </div>
+                                    {isFeatureSelection && (
+                                      <p className="text-xs text-gray-500 -mt-1 ml-6 leading-relaxed">
+                                        {pkg.id === 'custom' ? (
+                                          <>*8 features are included in the base custom price. <span style={{ fontWeight: 'bold' }}>Additional features are PRICED SEPARATELY and added to the base price.</span></>
+                                        ) : pkg.maxFeatureSelections !== null ? (
+                                          <>Select your features (up to {pkg.maxFeatureSelections}) in the next step. <span style={{ fontWeight: 'bold' }}>Each feature is PRICED SEPARATELY and added to the base price.</span></>
+                                        ) : (
+                                          <>Select your features in the next step. <span style={{ fontWeight: 'bold' }}>Each feature is PRICED SEPARATELY and added to the base price.</span></>
+                                        )}
+                                      </p>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
 
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
                               e.preventDefault()
-                              setSelectedWebsitePackage(pkg.id)
+                              // Toggle selection - allow unselecting
+                              setSelectedWebsitePackage(isSelected ? null : pkg.id)
                             }}
-                            className={`w-full py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
+                            className={`w-full py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                               isSelected
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                                ? 'bg-gray-100 text-gray-900 hover:bg-blue-600 hover:text-white'
+                                : 'bg-blue-600 text-white hover:bg-blue-700'
                             }`}
                           >
-                            {isSelected ? 'Selected' : 'Select Package'}
+                            {isSelected ? 'Unselect' : 'Select Package'}
                           </button>
                         </CardContent>
                       </motion.div>
@@ -426,18 +469,15 @@ export function PackageSelectionScreen({
 
       {/* Hosting & Maintenance Packages */}
       <div className="mb-8">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Hosting & Maintenance Packages
+        <div className="text-center mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Hosting & Maintenance
           </h2>
-          <p className="text-gray-600 max-w-3xl mx-auto text-sm leading-relaxed">
-            Keep your website secure, fast, and up-to-date with our comprehensive maintenance packages. Each includes monthly work credits for updates and improvements.
-          </p>
         </div>
 
         {/* Duration Selector */}
-        <div className="flex justify-center mb-6">
-          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+        <div className="flex justify-center mb-4">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-sm">
             {([3, 6, 12] as HostingDuration[]).map((duration) => {
               const discount = DURATION_DISCOUNTS[duration]
               const isSelected = hostingDuration === duration
@@ -445,7 +485,7 @@ export function PackageSelectionScreen({
                 <button
                   key={duration}
                   onClick={() => setHostingDuration(duration)}
-                  className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
                     isSelected
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -459,37 +499,68 @@ export function PackageSelectionScreen({
         </div>
 
         {/* Hosting Package Cards */}
-        {/* GRID CONTAINER - items-start prevents cards from stretching to match tallest card */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 items-start">
+        {/* VERTICAL STACK - Horizontal cards stacked vertically */}
+        <div className="flex flex-col gap-3 mb-6">
           {/* None Option */}
           <Card
-            className={`cursor-pointer transition-all flex flex-col ${
+            className={`transition-all flex flex-col relative ${
               selectedHostingPackage === 'none'
-                ? 'border-2 border-gray-400 shadow-md'
+                ? 'border-2 border-blue-500 shadow-md'
                 : 'border border-gray-200 hover:border-gray-300'
             }`}
-            onClick={() => setSelectedHostingPackage('none')}
           >
-            <CardHeader className="p-5 flex-1 flex flex-col justify-center min-h-[140px]">
-              <CardTitle className="text-base font-bold text-gray-900 mb-3">
-                No Hosting
-              </CardTitle>
-              <CardDescription className="text-sm">
-                I'll handle hosting myself
-              </CardDescription>
-              <div className="mt-3">
-                <span className="text-xl font-bold text-gray-900">$0</span>
-                <span className="text-xs text-gray-500 ml-1.5">/month</span>
-              </div>
-            </CardHeader>
-            {selectedHostingPackage === 'none' && (
-              <CardContent className="pt-0 pb-4 px-5">
-                <div className="flex items-center justify-center gap-1.5 text-gray-600 font-medium text-xs pt-3 border-t border-gray-200">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Selected</span>
+            {/* Selection Box - Top Right - INSIDE CARD */}
+            <div 
+              className="absolute top-3 right-3 z-20"
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                // Select "No Hosting" option
+                setSelectedHostingPackage('none')
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation()
+              }}
+            >
+              <div className="group relative cursor-pointer">
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                  selectedHostingPackage === 'none'
+                    ? 'border-blue-600 bg-blue-600'
+                    : 'border-gray-300 bg-white group-hover:border-blue-500 group-hover:bg-blue-50'
+                }`}>
+                  {selectedHostingPackage === 'none' && (
+                    <CheckCircle2 className="w-3 h-3 text-white" />
+                  )}
                 </div>
-              </CardContent>
-            )}
+                <div className="absolute right-0 top-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-30">
+                  <div className="bg-gray-900 text-white text-xs px-2 py-1 rounded shadow-lg">
+                    {selectedHostingPackage === 'none' ? 'Unselect' : 'Select this package'}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div 
+              className="cursor-pointer flex-1"
+              onClick={() => setSelectedHostingPackage('none')}
+            >
+              <CardHeader className="p-4 flex-1 flex flex-row items-center justify-between min-h-[80px]">
+                <div className="flex-1 pr-8">
+                  <CardTitle className="text-base font-bold text-gray-900 mb-1">
+                    No Hosting
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    I'll handle hosting myself
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-4 pr-14">
+                  <div className="text-right min-w-[120px]">
+                    <span className="text-xl font-bold text-gray-900">$0</span>
+                    <span className="text-xs text-gray-500 ml-1.5">/month</span>
+                  </div>
+                </div>
+              </CardHeader>
+            </div>
           </Card>
 
           {/* Hosting Options */}
@@ -503,14 +574,14 @@ export function PackageSelectionScreen({
             return (
               <Card
                 key={pkg.id}
-                className={`transition-all flex flex-col relative overflow-hidden ${
+                className={`transition-all flex flex-col relative ${
                   isSelected
                     ? 'border-2 border-blue-500 shadow-md'
                     : 'border border-gray-200 hover:border-gray-300'
                 } ${isPopular ? 'border-green-500 border-2' : ''}`}
               >
                 {isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap z-10">
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap z-30">
                     Most Popular
                   </div>
                 )}
@@ -521,7 +592,8 @@ export function PackageSelectionScreen({
                   onClick={(e) => {
                     e.stopPropagation()
                     e.preventDefault()
-                    setSelectedHostingPackage(pkg.id)
+                    // Toggle selection - allow unselecting
+                    setSelectedHostingPackage(isSelected ? 'none' : pkg.id)
                   }}
                   onMouseDown={(e) => {
                     e.stopPropagation()
@@ -537,18 +609,17 @@ export function PackageSelectionScreen({
                         <CheckCircle2 className="w-3 h-3 text-white" />
                       )}
                     </div>
-                    <div className="absolute right-0 top-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                    <div className="absolute right-0 top-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-30">
                       <div className="bg-gray-900 text-white text-xs px-2 py-1 rounded shadow-lg">
-                        Select this package
+                        {isSelected ? 'Unselect' : 'Select this package'}
                       </div>
-                      <div className="absolute right-1.5 -top-1 w-1.5 h-1.5 bg-gray-900 rotate-45"></div>
                     </div>
                   </div>
                 </div>
                 
-                {/* Collapsed State - Always Visible */}
+                {/* Collapsed State - Horizontal Layout */}
                 <div 
-                  className="cursor-pointer flex-1 flex flex-col"
+                  className="cursor-pointer flex-1"
                   onClick={(e) => {
                     // CRITICAL: Stop all event propagation immediately
                     e.stopPropagation()
@@ -569,16 +640,21 @@ export function PackageSelectionScreen({
                     e.preventDefault()
                   }}
                 >
-                  <CardHeader className="p-5 flex-1 flex flex-col justify-center min-h-[140px]">
-                    <div className="pr-8">
-                      <CardTitle className="text-base font-bold text-gray-900 mb-3">
+                  <CardHeader className="p-4 flex-1 flex flex-row items-center justify-between min-h-[80px]">
+                    <div className="flex-1 pr-8">
+                      <CardTitle className="text-base font-bold text-gray-900 mb-1">
                         {pkg.name}
                       </CardTitle>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xl font-bold text-gray-900">
-                          ${pkg.monthlyPrice}
-                        </span>
-                        <span className="text-xs text-gray-500">/month</span>
+                      <p className="text-sm text-gray-600">{pkg.subtitle}</p>
+                    </div>
+                    <div className="flex items-center gap-4 pr-14">
+                      <div className="text-right min-w-[120px]">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xl font-bold text-gray-900">
+                            ${pkg.monthlyPrice}
+                          </span>
+                          <span className="text-xs text-gray-500">/month</span>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
@@ -595,8 +671,8 @@ export function PackageSelectionScreen({
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <CardContent className="px-5 pb-5 pt-0">
-                        <div className="mb-3">
+                      <CardContent className="px-4 pb-4 pt-0 border-t border-gray-200">
+                        <div className="mb-2 mt-3">
                           <div className="text-xs text-gray-500 mb-1">
                             ${pkg.totalPrice.toLocaleString()} total for {hostingDuration} months
                           </div>
@@ -606,67 +682,76 @@ export function PackageSelectionScreen({
                             </div>
                           )}
                         </div>
-                        <p className="text-sm text-blue-600 font-medium mb-2">
-                          {pkg.subtitle}
-                        </p>
-                        <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                        <p className="text-sm text-gray-600 mb-3 leading-relaxed">
                           {pkg.description}
                         </p>
 
                         {/* Monthly Work Credit */}
-                        <div className="bg-blue-50 rounded-lg p-3 mb-4 text-center">
+                        <div className="bg-blue-50 rounded-lg p-2.5 mb-3 text-center">
                           <div className="text-xl font-bold text-gray-900">
                             {pkg.workCreditHours} {pkg.workCreditHours === 1 ? 'Hour' : 'Hours'}
                           </div>
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-xs text-gray-600 mt-0.5">
                             Monthly Work Credit
                           </div>
                         </div>
                         
-                        <ul className="space-y-2 mb-4">
-                          {pkg.features.map((feature, idx) => (
-                            <li key={idx} className="flex items-start gap-2.5 text-sm text-gray-700">
-                              <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                              <span className="leading-relaxed">{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
+                          {/* Left column - first half of features */}
+                          <div className="space-y-1.5">
+                            {pkg.features.slice(0, Math.ceil(pkg.features.length / 2)).map((feature, idx) => {
+                              return (
+                                <div key={`left-${idx}`} className="flex items-start gap-2 text-sm text-gray-700">
+                                  <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <Check className="w-3 h-3 text-white" />
+                                  </div>
+                                  <span className="leading-relaxed font-bold">{feature}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {/* Right column - second half of features */}
+                          <div className="space-y-1.5">
+                            {pkg.features.slice(Math.ceil(pkg.features.length / 2)).map((feature, idx) => {
+                              const originalIdx = Math.ceil(pkg.features.length / 2) + idx
+                              return (
+                                <div key={`right-${originalIdx}`} className="flex items-start gap-2 text-sm text-gray-700">
+                                  <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <Check className="w-3 h-3 text-white" />
+                                  </div>
+                                  <span className="leading-relaxed font-bold">{feature}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
 
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             e.preventDefault()
-                            setSelectedHostingPackage(pkg.id)
+                            // Toggle selection - allow unselecting
+                            setSelectedHostingPackage(isSelected ? 'none' : pkg.id)
                           }}
-                          className={`w-full py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
+                          className={`w-full py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                             isSelected
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                              ? 'bg-gray-100 text-gray-900 hover:bg-blue-600 hover:text-white'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
                           }`}
                         >
-                          {isSelected ? 'Selected' : 'Select Package'}
+                          {isSelected ? 'Unselect' : 'Select Package'}
                         </button>
                       </CardContent>
                     </motion.div>
                   )}
                 </AnimatePresence>
-
-                {/* Selected Indicator - Show when collapsed and selected */}
-                {!isExpanded && isSelected && (
-                  <div className="px-5 pb-4">
-                    <div className="flex items-center justify-center gap-1.5 text-blue-600 font-medium text-xs pt-3 border-t border-gray-200">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Selected</span>
-                    </div>
-                  </div>
-                )}
               </Card>
             )
           })}
         </div>
 
         {/* Support Period Note */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-4xl mx-auto">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-w-4xl mx-auto">
           <p className="text-sm text-gray-700">
             <span className="font-semibold">*Support Period:</span> All website projects include complimentary support for the specified period (30-90 days depending on package). After this period, ongoing maintenance is available through our hosting & maintenance packages above.
           </p>
@@ -674,7 +759,7 @@ export function PackageSelectionScreen({
       </div>
 
       {/* Continue Button */}
-      <div className="mt-8 flex justify-center">
+      <div className="mt-6 flex justify-center">
         <Button
           onClick={handleContinue}
           disabled={!canContinue}

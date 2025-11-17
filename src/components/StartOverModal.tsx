@@ -73,7 +73,7 @@ export function StartOverModal({ open, onOpenChange }: StartOverModalProps) {
         <DialogClose onClose={() => onOpenChange(false)} />
         <DialogHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <AlertTriangle className="h-8 w-8 text-red-500" />
+            <AlertTriangle className="h-8 w-8 text-red-600" />
           </div>
           <DialogDescription className="text-center text-base">
             This will permanently delete all your progress and start a fresh session.

@@ -165,6 +165,12 @@ export default function ConversationPage() {
       return // Don't initialize if we're resetting
     }
     
+    // Don't initialize if we're showing package or feature selection screens
+    // These screens should appear without triggering question generation
+    if (showingPackageSelection || showingFeatureSelection) {
+      return
+    }
+    
     if (!hasInitialized && userName && userEmail && !currentQuestion && !isTyping) {
       setHasInitialized(true)
       // Set animation phase to processing immediately to show ProcessingIndicator instead of old typing indicator
@@ -176,7 +182,7 @@ export default function ConversationPage() {
           animationController.current.setPhase('idle')
         })
     }
-  }, [hasInitialized, userName, userEmail, currentQuestion, isTyping, orchestrateNext])
+  }, [hasInitialized, userName, userEmail, currentQuestion, isTyping, orchestrateNext, showingPackageSelection, showingFeatureSelection])
   
   // When isTyping becomes true and we don't have a question yet, ensure we're in processing phase
   useEffect(() => {
@@ -606,7 +612,7 @@ export default function ConversationPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowStartOverModal(true)}
-                  className="text-gray-600 hover:text-gray-900"
+                  className="text-gray-600 hover:text-gray-900 hover:bg-red-100"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Start Over
@@ -618,9 +624,9 @@ export default function ConversationPage() {
       )}
 
       {/* Main Content Area */}
-      <div className={`max-w-7xl mx-auto px-6 py-8 ${isDesktop ? 'grid grid-cols-12 gap-8' : ''}`}>
-        {/* Desktop Sidebar with Progress */}
-        {isDesktop && scopeProgress && (
+      <div className={`max-w-7xl mx-auto px-6 py-8 ${isDesktop && !isFeatureSelectionMode ? 'grid grid-cols-12 gap-8' : ''}`}>
+        {/* Desktop Sidebar with Progress - Hide when FeatureChipGrid is shown */}
+        {isDesktop && scopeProgress && !isFeatureSelectionMode && (
           <aside className="col-span-4">
             <div className="sticky top-8 space-y-6">
               <ScopeProgressPanel
@@ -635,7 +641,7 @@ export default function ConversationPage() {
         )}
 
         {/* Conversation Area */}
-        <div className={isDesktop ? 'col-span-8' : 'max-w-3xl mx-auto'}>
+        <div className={isDesktop && !isFeatureSelectionMode ? 'col-span-8' : isFeatureSelectionMode ? 'w-full' : 'max-w-3xl mx-auto'}>
         {/* Phase 3: Processing Indicator - Don't show during package selection */}
         {animationState.phase === 'processing' && !isPackageSelectionMode && (
           <ProcessingIndicator
@@ -677,6 +683,8 @@ export default function ConversationPage() {
             isSubmitting={isTyping}
             selectedWebsitePackage={selectedWebsitePackage}
             selectedHostingPackage={selectedHostingPackage}
+            scopeProgress={scopeProgress}
+            answeredQuestions={getAllFacts()}
           />
         )}
 

@@ -259,6 +259,13 @@ After gathering these essentials, trigger select_packages immediately. After pac
 - After packages are selected, use action: "recommend_features" to show the feature selection screen
 - The package selection happens first, then feature selection in a separate, self-contained screen with visual chips
 
+**CRITICAL: FEATURE SELECTION LIMITS (Architecture Enforcement)**
+- Starter Package: Maximum 3 feature selections
+- Professional Package: Maximum 5 feature selections  
+- Custom Web App Package: Unlimited feature selections (custom features included)
+- These limits are enforced in the UI (FeatureChipGrid) and backend (conversationStore)
+- The orchestration system must respect these limits when recommending features
+
 **EXCEPTION - VISITOR ACTIONS QUESTION:**
 - ✅ "What should your website visitors be able to do on your new site?" - This is ALLOWED and should be asked
 - This question maps to Section 4: Business Context (goals) and Section 7: Technical Specifications (call-to-action requirements)

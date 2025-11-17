@@ -193,11 +193,11 @@ export class ScopeGenerator {
   
   private getPackagePrice(packageType: string): number {
     const prices = {
-      starter: 2500,
-      professional: 4500,
-      custom: 6000
+      starter: 1900,
+      professional: 3250,
+      custom: 5250
     }
-    return prices[packageType as keyof typeof prices] || 6000
+    return prices[packageType as keyof typeof prices] || 5250
   }
   
   private getComplexityRationale(

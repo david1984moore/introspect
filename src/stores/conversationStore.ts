@@ -605,8 +605,8 @@ export const useConversationStore = create<ConversationState>()(
           return sum + (feature?.price || 0)
         }, 0)
         
-        const basePrice = state.featureSelection?.package === 'starter' ? 2500 :
-                         state.featureSelection?.package === 'professional' ? 4500 : 6000
+        const basePrice = state.featureSelection?.package === 'starter' ? 1900 :
+                         state.featureSelection?.package === 'professional' ? 3250 : 5250
         
         set((state) => ({
           featureSelection: state.featureSelection ? {
@@ -1133,7 +1133,7 @@ export const useConversationStore = create<ConversationState>()(
               const packageRec: PackageRecommendation = {
                 package: pkg as 'starter' | 'professional' | 'custom',
                 rationale: `Based on your needs, we recommend the ${pkg} package.`,
-                basePrice: pkg === 'starter' ? 2500 : pkg === 'professional' ? 4500 : 6000,
+                basePrice: pkg === 'starter' ? 1900 : pkg === 'professional' ? 3250 : 5250,
                 included: featuresData.included || [],
               }
               
@@ -1171,7 +1171,7 @@ export const useConversationStore = create<ConversationState>()(
               const packageRec: PackageRecommendation = {
                 package: defaultPackage,
                 rationale: `Based on your needs, we recommend the ${defaultPackage} package.`,
-                basePrice: defaultPackage === 'starter' ? 2500 : defaultPackage === 'professional' ? 4500 : 6000,
+                basePrice: defaultPackage === 'starter' ? 1900 : defaultPackage === 'professional' ? 3250 : 5250,
                 included: [],
               }
               
@@ -1518,13 +1518,34 @@ export const useConversationStore = create<ConversationState>()(
           // Calculate package tier if not already set
           const packageTier = state.packageTier || get().calculatePackageTier()
           
+          // Feature selection limits per package (architecture enforcement)
+          const PACKAGE_FEATURE_LIMITS: Record<'starter' | 'professional' | 'custom', number | null> = {
+            starter: 3,
+            professional: 5,
+            custom: null // Unlimited
+          }
+          
+          // Validate feature selection limit based on selected package
+          const selectedPackage = state.selectedWebsitePackage || 
+            (packageTier === 'Starter' ? 'starter' : 
+             packageTier === 'Professional' ? 'professional' : 'custom')
+          
+          const maxFeatureSelections = PACKAGE_FEATURE_LIMITS[selectedPackage]
+          
+          if (maxFeatureSelections !== null && selectedFeatureIds.length > maxFeatureSelections) {
+            throw new Error(
+              `Feature selection limit exceeded. The ${selectedPackage === 'starter' ? 'Starter' : 'Professional'} package allows a maximum of ${maxFeatureSelections} feature selection${maxFeatureSelections !== 1 ? 's' : ''}. ` +
+              `You selected ${selectedFeatureIds.length} features. Please reduce your selection or upgrade your package.`
+            )
+          }
+          
           // Import feature library for pricing calculation
           const { featureLibrary } = await import('@/lib/features/featureLibraryParser')
           const pricing = featureLibrary.calculatePricing(selectedFeatureIds, packageTier)
           
           // Update feature selection with new pricing
-          const basePrice = packageTier === 'Starter' ? 2500 : 
-                           packageTier === 'Professional' ? 4500 : 6000
+          const basePrice = packageTier === 'Starter' ? 1900 : 
+                           packageTier === 'Professional' ? 3250 : 5250
           
           get().selectFeatures(selectedFeatureIds)
           
@@ -1649,7 +1670,7 @@ export const useConversationStore = create<ConversationState>()(
           } : {
             package: websitePackage,
             selectedFeatures: [],
-            totalPrice: websitePackage === 'starter' ? 2500 : websitePackage === 'professional' ? 4500 : 0,
+            totalPrice: websitePackage === 'starter' ? 1900 : websitePackage === 'professional' ? 3250 : 0,
             monthlyHosting,
             featuresPresented: false,
             presentedAt: null,
@@ -1671,7 +1692,7 @@ export const useConversationStore = create<ConversationState>()(
         const packageRec: PackageRecommendation = {
           package: websitePackage,
           rationale: `Based on your needs, we recommend the ${websitePackage} package.`,
-          basePrice: websitePackage === 'starter' ? 2500 : websitePackage === 'professional' ? 4500 : 6000,
+          basePrice: websitePackage === 'starter' ? 1900 : websitePackage === 'professional' ? 3250 : 5250,
           included: [],
         }
         
@@ -1686,8 +1707,9 @@ export const useConversationStore = create<ConversationState>()(
           orchestrationError: null,
         })
         
-        // Continue orchestration (will show feature screen)
-        await get().orchestrateNext()
+        // DO NOT call orchestrateNext() here - it will trigger question generation
+        // Questions should only continue AFTER feature selection is complete
+        // orchestrateNext() will be called in submitFeatureSelection() after features are selected
       },
       
       // Phase 8: Submit validation response
