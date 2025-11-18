@@ -19,8 +19,8 @@ import { ScopeProgressPanel } from '@/components/conversation/ScopeProgressPanel
 import { MobileProgressHeader } from '@/components/conversation/MobileProgressHeader'
 import { ProcessingIndicator } from '@/components/conversation/ProcessingIndicator'
 import { AmbientBackground } from '@/components/conversation/AmbientBackground'
-import { PriceCalculator } from '@/components/conversation/PriceCalculator'
-import { ConversationAnimationController } from '@/lib/conversationAnimationState'
+import { CompactPriceCalculator } from '@/components/conversation/CompactPriceCalculator'
+import { ConversationAnimationController, type AnimationState } from '@/lib/conversationAnimationState'
 import { TIMINGS, EASINGS } from '@/lib/animationTimings'
 import { useContextDisplay } from '@/hooks/useContextDisplay'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -109,30 +109,38 @@ export default function ConversationPage() {
   // Get package tier for feature pricing
   const currentPackageTier = packageTier || calculatePackageTier()
 
-  // Calculate feature pricing for PriceCalculator
-  const featurePricing = useMemo(() => {
-    if (!featureSelection?.selectedFeatures || featureSelection.selectedFeatures.length === 0) {
-      return 0
-    }
+  // Get package tier name
+  const packageTierName = useMemo(() => {
+    return selectedWebsitePackage === 'starter' ? 'Starter' :
+           selectedWebsitePackage === 'professional' ? 'Professional' :
+           selectedWebsitePackage === 'custom' ? 'Custom' : 
+           currentPackageTier.charAt(0).toUpperCase() + currentPackageTier.slice(1).toLowerCase()
+  }, [selectedWebsitePackage, currentPackageTier])
+
+  // Get included features for the calculator
+  const includedFeatures = useMemo(() => {
+    if (!packageTierName) return []
     
-    // Get package tier name
-    const packageTierName = selectedWebsitePackage === 'starter' ? 'Starter' :
-                           selectedWebsitePackage === 'professional' ? 'Professional' :
-                           selectedWebsitePackage === 'custom' ? 'Custom' : 
-                           currentPackageTier.charAt(0).toUpperCase() + currentPackageTier.slice(1).toLowerCase()
+    const websiteTypeForFeatures = websiteType || 'business'
+    const featuresByCategory = featureLibrary.getFeaturesByCategory(websiteTypeForFeatures)
+    const allFeatures = Object.values(featuresByCategory).flat()
     
-    // Calculate pricing using featureLibrary
-    const pricingResult = featureLibrary.calculatePricing(
-      featureSelection.selectedFeatures,
-      packageTierName
-    )
-    
-    // Calculate total addon features cost (excluding included features)
-    const addonFeaturesTotal = pricingResult.addonFeatures.reduce((sum, f) => sum + (f.pricing.addonPrice || 0), 0)
-    const addonTotal = addonFeaturesTotal
-    
-    return addonTotal
-  }, [featureSelection?.selectedFeatures, selectedWebsitePackage, currentPackageTier])
+    return allFeatures.filter(feature => 
+      feature.pricing.type === 'included' && 
+      feature.pricing.tiers?.includes(packageTierName)
+    ).map(feature => ({
+      id: feature.id,
+      name: feature.name
+    }))
+  }, [packageTierName, websiteType])
+
+  // Get max feature selections based on package
+  const maxFeatureSelections = useMemo(() => {
+    return selectedWebsitePackage === 'starter' ? 3 :
+           selectedWebsitePackage === 'professional' ? 5 :
+           selectedWebsitePackage === 'custom' ? 8 :
+           null
+  }, [selectedWebsitePackage])
 
   // Check if current question is a file upload question (brand materials)
   const isFileUploadQuestion = currentQuestion && currentQuestion.inputType === 'file_upload'
@@ -235,10 +243,22 @@ export default function ConversationPage() {
   // 2. When section statuses need updating (in updateProgress called from orchestrateNext)
 
   // Phase 3: Subscribe to animation state changes
+  // Use a ref to track previous state and prevent unnecessary updates
+  const previousAnimationStateRef = useRef<AnimationState | null>(null)
+  
   useEffect(() => {
     const unsubscribe = animationController.current.subscribe((newState) => {
-      console.log('[ConversationPage] Animation state changed:', newState.phase, 'selectedOption:', newState.selectedOptionId)
-      setAnimationState(newState)
+      // Only update if state has actually changed
+      const prevState = previousAnimationStateRef.current
+      if (!prevState || 
+          prevState.phase !== newState.phase ||
+          prevState.selectedOptionId !== newState.selectedOptionId ||
+          prevState.processingStartTime !== newState.processingStartTime ||
+          prevState.newQuestionData !== newState.newQuestionData) {
+        console.log('[ConversationPage] Animation state changed:', newState.phase, 'selectedOption:', newState.selectedOptionId)
+        previousAnimationStateRef.current = newState
+        setAnimationState(newState)
+      }
     })
     return unsubscribe
   }, [])
@@ -381,7 +401,7 @@ export default function ConversationPage() {
       const currentPhase = animationController.current.getState().phase
       // Only log and reset if we're not already in idle
       if (currentPhase !== 'idle') {
-        console.error('[ConversationPage] Orchestration error detected, resetting animation phase from', currentPhase, 'to idle')
+        console.warn('[ConversationPage] Orchestration error detected, resetting animation phase from', currentPhase, 'to idle')
         animationController.current.setPhase('idle')
       }
       // Also clear any pending answers since we're in an error state
@@ -614,7 +634,7 @@ export default function ConversationPage() {
 
       {/* Desktop Header */}
       {!isMobile && (
-        <div className="bg-white border-b border-gray-200">
+        <div className="bg-white border-b border-gray-200 sticky top-0 z-50" style={{ position: 'sticky', top: 0 }}>
           <div className="max-w-7xl mx-auto px-6 py-2">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -660,25 +680,27 @@ export default function ConversationPage() {
       )}
 
       {/* Main Content Area */}
-      <div className={`max-w-7xl mx-auto px-6 py-8 ${isDesktop && !isFeatureSelectionMode ? 'grid grid-cols-12 gap-8' : ''}`}>
-        {/* Desktop Sidebar with Progress - Hide when FeatureChipGrid is shown */}
+      <div className={`max-w-7xl mx-auto px-4 py-3 ${isDesktop && !isFeatureSelectionMode ? 'grid grid-cols-12 gap-6' : ''}`}>
+        {/* Desktop Sidebar - Hide when FeatureChipGrid is shown */}
         {isDesktop && scopeProgress && !isFeatureSelectionMode && (
           <aside className="col-span-4">
             <div className="sticky top-8 space-y-6">
-              {/* Pricing Calculator - Above Progress Bar */}
+              {/* Pricing Calculator */}
               {(selectedWebsitePackage || (featureSelection?.selectedFeatures && featureSelection.selectedFeatures.length > 0)) && (
-                <PriceCalculator
+                <CompactPriceCalculator
                   websitePackage={selectedWebsitePackage}
                   hostingPackage={selectedHostingPackage}
-                  websitePackages={WEBSITE_PACKAGES}
-                  hostingPackages={HOSTING_PACKAGES}
                   selectedFeatures={featureSelection?.selectedFeatures || []}
-                  featurePricing={featurePricing}
+                  packageTierName={packageTierName}
+                  includedFeatures={includedFeatures}
+                  maxFeatureSelections={maxFeatureSelections}
+                  defaultExpanded={false}
                 />
               )}
+              {/* Answered Questions List - No Progress Bar */}
               <ScopeProgressPanel
                 progress={scopeProgress}
-                variant="compact"
+                variant="answers-only"
                 collapsible
                 defaultExpanded={false}
                 answeredQuestions={getAllFacts()}
@@ -688,7 +710,7 @@ export default function ConversationPage() {
         )}
 
         {/* Conversation Area */}
-        <div className={isDesktop && !isFeatureSelectionMode ? 'col-span-8' : isFeatureSelectionMode ? 'w-full' : 'max-w-3xl mx-auto'}>
+        <div className={isDesktop && !isFeatureSelectionMode ? 'col-span-8' : 'w-full'}>
         {/* Phase 3: Processing Indicator - Don't show during package selection */}
         {animationState.phase === 'processing' && !isPackageSelectionMode && (
           <ProcessingIndicator
@@ -770,8 +792,8 @@ export default function ConversationPage() {
                   // Only trigger fade animation for 2-option questions (immediate submission)
                   // For >2-option questions, animation triggers when continue button is clicked
                   if (currentQuestion?.inputType === 'radio' && value) {
-                    const optionCount = currentQuestion.options?.length || 0
-                    const option = currentQuestion.options?.find(o => o.value === value || o.label === value)
+                    const optionCount = currentQuestion.options.length
+                    const option = currentQuestion.options.find(o => o.value === value || o.label === value)
                     console.log('[ConversationPage] Found option:', option?.value, 'for value:', value, 'option count:', optionCount)
                     if (option) {
                       // Store answer for delayed submission
@@ -799,7 +821,7 @@ export default function ConversationPage() {
                         return
                       }
                     } else {
-                      console.warn('[ConversationPage] Option not found for value:', value, 'available options:', currentQuestion.options?.map(o => o.value))
+                      console.warn('[ConversationPage] Option not found for value:', value, 'available options:', currentQuestion.options.map(o => o.value))
                     }
                   }
                   
@@ -848,22 +870,27 @@ export default function ConversationPage() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm"
+            style={{
+              maxHeight: 'calc(100vh - 9rem)', // Account for header and padding
+            }}
+            className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col"
           >
             {/* Context Summary removed - no longer displayed */}
 
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              {currentQuestion.text}
-            </h2>
+            {/* Question Header */}
+            <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
+              <h2 className="text-xl font-semibold text-gray-900 mb-2 leading-tight">
+                {currentQuestion.text}
+              </h2>
+              {currentQuestion.helperText && (
+                <p className="text-sm text-gray-600 mb-1">
+                  {currentQuestion.helperText}
+                </p>
+              )}
+            </div>
 
-            {currentQuestion.helperText && (
-              <p className="text-sm text-gray-600 mb-6">
-                {currentQuestion.helperText}
-              </p>
-            )}
-
-            {/* File Upload */}
-            <div className="mb-6">
+            {/* File Upload Area */}
+            <div className="px-6 py-4 flex-1 min-h-0">
               <FileUpload
                 files={uploadedFiles}
                 onFilesChange={setUploadedFiles}
@@ -872,13 +899,12 @@ export default function ConversationPage() {
               />
             </div>
 
-            {/* Buttons */}
-            <div className="space-y-3">
+            {/* Buttons Footer */}
+            <div className="px-6 pt-4 pb-5 border-t border-gray-100 space-y-2.5 flex-shrink-0">
               <Button
                 onClick={handleSubmit}
                 disabled={isTyping}
-                className="w-full"
-                size="lg"
+                className="w-full h-12 text-base font-semibold"
               >
                 Continue
               </Button>
@@ -886,7 +912,7 @@ export default function ConversationPage() {
                 onClick={handleSkip}
                 disabled={isTyping}
                 variant="ghost"
-                className="w-full"
+                className="w-full h-9 text-sm"
               >
                 Skip
               </Button>
@@ -894,15 +920,10 @@ export default function ConversationPage() {
           </motion.div>
         )}
 
-        {/* Checkbox Options (Multi-select) - CRITICAL FIX: Wrap in AnimatePresence for fade animations */}
-        {/* CRITICAL FIX: AnimatePresence needs component to stay mounted during questionExit phase */}
-        {/* mode="wait" ensures exit animation completes before next question enters */}
+        {/* Checkbox Options (Multi-select) - Content-First Architecture: Card expands naturally, no height constraints */}
         {!isValidationMode && !isFeatureSelectionMode && !isPackageSelectionMode &&
-         currentQuestion?.inputType === 'checkbox' && 
-         currentQuestion.options && (
+         currentQuestion?.inputType === 'checkbox' && (
           <AnimatePresence mode="wait" initial={false}>
-            {/* CRITICAL FIX: Show checkbox question during all phases except processing */}
-            {/* Must show during questionExit so AnimatePresence can complete exit animation */}
             {currentQuestion && animationState.phase !== 'processing' && (
               <motion.div
                 key={currentQuestion.id}
@@ -915,75 +936,79 @@ export default function ConversationPage() {
                 exit={{ opacity: 0, y: -40, scale: 0.96 }}
                 transition={{
                   duration: animationState.phase === 'questionExit' 
-                    ? TIMINGS.QUESTION_FADE_DURATION / 1000  // Exit duration matches QUESTION_FADE_DURATION
-                    : TIMINGS.CONTAINER_FADE_IN / 1000,     // Entrance duration matches CONTAINER_FADE_IN
+                    ? TIMINGS.QUESTION_FADE_DURATION / 1000
+                    : TIMINGS.CONTAINER_FADE_IN / 1000,
                   ease: animationState.phase === 'questionExit' 
-                    ? EASINGS.OUT      // Ease out for exit
-                    : EASINGS.IN_OUT,  // Ease in-out for entrance
+                    ? EASINGS.OUT
+                    : EASINGS.IN_OUT,
                 }}
                 style={{
                   pointerEvents: animationState.phase === 'questionExit' ? 'none' : undefined,
                 }}
-                className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm"
+                className="bg-white rounded-lg border border-gray-200 shadow-sm w-full max-w-4xl mx-auto"
               >
-                {/* Context Summary removed - no longer displayed */}
-
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  {currentQuestion.text.toLowerCase().includes('tools') && currentQuestion.text.toLowerCase().includes('business')
-                    ? 'Do you have any tools that you want to integrate with your new website?'
-                    : currentQuestion.text}
-                </h2>
-
-                <div className="space-y-3 mb-6">
-                  <p className="text-sm text-gray-500 mb-4">Choose all that apply</p>
-                  {currentQuestion.options.map((option: QuestionOption) => (
-                    <div key={option.value} className="flex items-center space-x-3">
-                      <Checkbox
-                        id={option.value}
-                        checked={selectedOptions.includes(option.value)}
-                        onCheckedChange={() => handleCheckboxToggle(option.value)}
-                        disabled={animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
-                      />
-                      <Label
-                        htmlFor={option.value}
-                        className="flex-1 cursor-pointer text-base font-normal"
-                      >
-                        {option.label}
-                      </Label>
-                    </div>
-                  ))}
-
-                  {/* Custom Text Input for "Something else" */}
-                  {selectedOptions.includes('other') && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="mt-4"
-                    >
-                      <Input
-                        placeholder="Please describe..."
-                        value={customText}
-                        onChange={(e) => setCustomText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && canSubmit()) {
-                            handleSubmit()
-                          }
-                        }}
-                        autoFocus
-                        disabled={animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
-                      />
-                    </motion.div>
-                  )}
-
+                {/* Question Header */}
+                <div className="px-6 pt-5 pb-3 border-b border-gray-100">
+                  <h2 className="text-xl font-semibold text-gray-900 leading-tight">
+                    {currentQuestion.text.toLowerCase().includes('tools') && currentQuestion.text.toLowerCase().includes('business')
+                      ? 'Do you have any tools that you want to integrate with your new website?'
+                      : currentQuestion.text}
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-2">Choose all that apply</p>
                 </div>
 
-                {/* Submit Buttons */}
-                <div className="space-y-3">
+                {/* Options - Natural content flow, no flex constraints */}
+                <div className="px-6 py-4">
+                  <div className="space-y-3">
+                    {currentQuestion.options.map((option: QuestionOption) => (
+                      <div key={option.value} className="flex items-start space-x-3">
+                        <Checkbox
+                          id={option.value}
+                          checked={selectedOptions.includes(option.value)}
+                          onCheckedChange={() => handleCheckboxToggle(option.value)}
+                          disabled={animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
+                          className="h-5 w-5 flex-shrink-0 mt-0.5"
+                        />
+                        <Label
+                          htmlFor={option.value}
+                          className="flex-1 cursor-pointer text-sm leading-relaxed text-gray-900"
+                        >
+                          {option.label}
+                        </Label>
+                      </div>
+                    ))}
+
+                    {/* Custom Text Input for "Something else" */}
+                    {selectedOptions.includes('other') && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="mt-3 ml-8"
+                      >
+                        <Input
+                          placeholder="Please describe..."
+                          value={customText}
+                          onChange={(e) => setCustomText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && canSubmit()) {
+                              handleSubmit()
+                            }
+                          }}
+                          autoFocus
+                          disabled={animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
+                          className="h-10 text-sm rounded-lg"
+                        />
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="px-6 pt-4 pb-5 border-t border-gray-100 space-y-2.5">
                   <Button
                     onClick={handleSubmit}
                     disabled={!canSubmit() || animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
-                    className="w-full"
-                    size="lg"
+                    className="w-full h-12 text-base font-semibold"
                   >
                     Continue
                   </Button>
@@ -991,7 +1016,7 @@ export default function ConversationPage() {
                     onClick={handleSkip}
                     disabled={isTyping || animationState.phase === 'questionExit' || animationState.phase === 'optionSelected'}
                     variant="ghost"
-                    className="w-full"
+                    className="w-full h-9 text-sm text-gray-600 hover:text-gray-900"
                   >
                     Skip
                   </Button>

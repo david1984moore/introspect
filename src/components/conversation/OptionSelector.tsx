@@ -129,9 +129,9 @@ export function OptionSelector({
   }
   
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div className={`space-y-2.5 ${className}`}>
       {/* Phase 6: Radio-style options with proper ARIA grouping */}
-      <div className="space-y-2" role="radiogroup" aria-label="Answer options">
+      <div className="space-y-1.5" role="radiogroup" aria-label="Answer options">
         {options.map((option, index) => {
           const isSelected = selectedValue === option.value
           const isSomethingElse = option.allowText
@@ -157,7 +157,7 @@ export function OptionSelector({
                 ease: EASINGS.IN_OUT
               }}
               className={`
-                w-full text-left p-4 rounded-lg border-2 transition-all duration-200
+                w-full text-left p-2.5 rounded-lg border-2 transition-all duration-200
                 ${isSelected 
                   ? 'border-primary bg-primary/5' 
                   : 'border-gray-200 bg-white hover:border-gray-300'
@@ -199,7 +199,7 @@ export function OptionSelector({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`
-                      font-medium text-base
+                      font-medium text-sm leading-relaxed
                       ${isSelected ? 'text-gray-900' : 'text-gray-700'}
                     `}>
                       {option.label}

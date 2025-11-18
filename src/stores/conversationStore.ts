@@ -1624,10 +1624,13 @@ export const useConversationStore = create<ConversationState>()(
           get().updateProgress()
         } catch (error) {
           console.error('Feature selection submission error:', error)
+          const errorMessage = error instanceof Error ? error.message : 'Failed to submit feature selection. Please try again.'
           set({
             isTyping: false,
-            orchestrationError: error instanceof Error ? error.message : 'Failed to submit feature selection. Please try again.',
+            orchestrationError: errorMessage,
           })
+          // Re-throw error so component can catch it
+          throw error
         }
       },
       
@@ -1696,20 +1699,19 @@ export const useConversationStore = create<ConversationState>()(
           included: [],
         }
         
-        // Trigger feature selection immediately after package selection
+        // Store package selection but DO NOT show feature screen yet
+        // Continue asking feature-related questions first
         set({
-          featureRecommendations: [], // Will be populated by feature selection screen
           packageRecommendation: packageRec,
-          showingFeatureSelection: true,
           packageTier,
-          currentQuestion: null,
+          showingPackageSelection: false,
           isTyping: false,
           orchestrationError: null,
         })
         
-        // DO NOT call orchestrateNext() here - it will trigger question generation
-        // Questions should only continue AFTER feature selection is complete
-        // orchestrateNext() will be called in submitFeatureSelection() after features are selected
+        // Continue orchestration to ask feature-related questions
+        // Feature screen will be shown only after all feature questions are answered
+        await get().orchestrateNext()
       },
       
       // Phase 8: Submit validation response

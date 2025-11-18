@@ -123,11 +123,18 @@ The end goal is generating a complete SCOPE.md document with 14 required section
 
 6. **MAKE DECISION**
    
-   **CRITICAL: CHECK QUESTION COUNT FIRST**
-   - IF questionCount >= 15: You MUST use action: "select_packages" (no exceptions) - package selection comes BEFORE features
-   - IF questionCount >= 10 AND has minimum info: You SHOULD use action: "select_packages"
-   - IF questionCount >= 10 BUT missing minimum info: Gather essentials quickly (1-2 questions max) then trigger
+   **CRITICAL: CHECK PACKAGE SELECTION STATUS FIRST**
+   - IF packages are already selected: Focus on feature-related questions, then trigger "recommend_features" when complete
+   - IF packages NOT selected AND questionCount >= 15: You MUST use action: "select_packages" (no exceptions)
+   - IF packages NOT selected AND questionCount >= 10 AND has minimum info: You SHOULD use action: "select_packages"
+   - IF packages NOT selected AND questionCount >= 10 BUT missing minimum info: Gather essentials quickly (1-2 questions max) then trigger
    
+   **IF PACKAGES ARE ALREADY SELECTED:**
+   - Continue asking feature-related questions (visitor actions, integrations, content management, ecommerce, booking, membership, etc.)
+   - Only trigger "recommend_features" when you have COMPLETE feature context
+   - Do NOT trigger "recommend_features" until all feature-determining questions are answered
+   
+   **IF PACKAGES ARE NOT SELECTED:**
    IF section requirements all met (all ✓):
    → Action: "validate_understanding" or move to next section
    → BUT: If questionCount >= 15, use "select_packages" instead
@@ -223,9 +230,17 @@ You have sufficient information to trigger the feature screen when you have gath
 1. **Question Count Limit**: If questionCount >= 15, you MUST use action: "select_packages" (even if some sections aren't complete)
 2. **Early Trigger**: If you have the minimum required information above AND questionCount >= 10, you SHOULD trigger select_packages
 3. **Efficiency Priority**: Focus questions on gathering functionality-related information quickly. Don't ask deep follow-ups - get the essentials and move on.
-4. **Flow Order**: Package selection comes FIRST, then feature selection after packages are selected
+4. **Flow Order**: Package selection comes FIRST, then CONTINUE asking feature-related questions, then feature selection screen
 
-**WHAT TO FOCUS ON BEFORE FEATURE SCREEN:**
+**CRITICAL: AFTER PACKAGE SELECTION - CONTINUE ASKING FEATURE-RELATED QUESTIONS**
+
+**IMPORTANT**: After packages are selected, DO NOT immediately show the feature screen. Instead:
+- Continue asking questions that help determine which features to recommend
+- Focus on gathering ALL feature-related information BEFORE showing the feature screen
+- Ask questions about: visitor actions, integrations, content management, ecommerce needs, booking/scheduling, membership needs, etc.
+- Only trigger "recommend_features" when you have COMPLETE feature context
+
+**WHAT TO FOCUS ON BEFORE PACKAGE SELECTION:**
 
 Priority order for questions (aim to cover these in first 10-12 questions):
 1. Business name (if not already known)
@@ -239,7 +254,25 @@ Priority order for questions (aim to cover these in first 10-12 questions):
 9. Do you have brand materials? (quick check)
 10. Any tools/integrations needed? (quick check)
 
-After gathering these essentials, trigger select_packages immediately. After packages are selected, the feature selection screen will appear.
+After gathering these essentials, trigger select_packages immediately.
+
+**WHAT TO FOCUS ON AFTER PACKAGE SELECTION (BEFORE FEATURE SCREEN):**
+
+After packages are selected, continue asking feature-related questions:
+1. Visitor actions (if not already asked) - "What should your website visitors be able to do?"
+2. Ecommerce specifics - "Do you need inventory management?", "Payment processing needs?"
+3. Booking/Scheduling - "Do you need appointment booking?", "Calendar integration?"
+4. Membership/Access - "Do you need user accounts?", "Member-only content?"
+5. Integrations - "What tools do you use?", "CRM integration?", "Email marketing platform?"
+6. Content management - "Who will update content?", "How often will content change?"
+7. Media needs - "Video content?", "Photo galleries?", "Interactive elements?"
+8. Contact methods - "Contact form?", "Live chat?", "Phone number display?"
+
+**ONLY trigger "recommend_features" when:**
+- You have gathered ALL feature-related information
+- You understand the complete functionality needs
+- You can make intelligent feature recommendations
+- User has answered questions about visitor actions, integrations, content management, and other feature-determining factors
 
 **NEVER ask questions like:**
 - "What features do you want on your website?"
@@ -256,8 +289,9 @@ After gathering these essentials, trigger select_packages immediately. After pac
 - Gather business context, goals, and requirements through regular questions
 - Extract intelligence about what the user needs (without asking about features directly)
 - When you have enough context, use action: "select_packages" to show package selection first
-- After packages are selected, use action: "recommend_features" to show the feature selection screen
-- The package selection happens first, then feature selection in a separate, self-contained screen with visual chips
+- **AFTER packages are selected, CONTINUE asking feature-related questions** (visitor actions, integrations, content management, ecommerce needs, etc.)
+- Only when you have COMPLETE feature context, use action: "recommend_features" to show the feature selection screen
+- The package selection happens first, then MORE questions about features, then feature selection in a separate, self-contained screen with visual chips
 
 **CRITICAL: FEATURE SELECTION LIMITS (Architecture Enforcement)**
 - Starter Package: Maximum 3 feature selections
@@ -1554,8 +1588,9 @@ Respond with valid JSON matching the required format.
       const hasBusinessName = intelligence?.businessName || intelligence?.companyName
       
       const currentQuestionCount = questionCount || 0
-      const mustTriggerFeatures = currentQuestionCount >= 15
-      const shouldTriggerFeatures = currentQuestionCount >= 10
+      const packagesAlreadySelected = selectedWebsitePackage !== null && selectedWebsitePackage !== undefined
+      const mustTriggerPackages = currentQuestionCount >= 15 && !packagesAlreadySelected
+      const shouldTriggerPackages = currentQuestionCount >= 10 && !packagesAlreadySelected
       
       // Check if we have minimum required information for feature screen
       const hasBusinessNameForFeatures = hasBusinessName || intelligence?.businessName || intelligence?.companyName
@@ -1570,8 +1605,12 @@ Respond with valid JSON matching the required format.
       const hasContentManagement = hasContentManagementInfo || intelligence?.contentReadiness || intelligence?.contentUpdateFrequency
       const hasIntegrations = hasToolsIntegrationsInfo || intelligence?.integrations || intelligence?.tools
       
-      const hasMinimumForFeatures = hasBusinessNameForFeatures && hasBusinessServices && hasTargetAudience && 
+      const hasMinimumForPackages = hasBusinessNameForFeatures && hasBusinessServices && hasTargetAudience && 
                                    hasPrimaryGoal && (hasVisitorActions || hasContentManagement)
+      
+      // Check if we have COMPLETE feature context (more comprehensive than minimum)
+      const hasCompleteFeatureContext = hasBusinessNameForFeatures && hasBusinessServices && hasTargetAudience && 
+                                        hasPrimaryGoal && hasVisitorActions && hasContentManagement && hasIntegrations
       
       contextMessage = `
 ${foundationContext}
@@ -1581,13 +1620,35 @@ Intelligence: ${JSON.stringify(intelligence || {})}
 ${!hasBusinessName ? '\n**MISSING: Business name - ask FIRST**' : ''}
 ${isAnsweringBusinessName && !hasBusinessName ? '\n**EXTRACT business name from answer**' : ''}
 
+${packagesAlreadySelected ? `
+**🚨 CRITICAL: PACKAGES ALREADY SELECTED - FOCUS ON FEATURE-RELATED QUESTIONS**
+
+Packages have been selected. You MUST continue asking feature-related questions BEFORE showing the feature screen.
+
+**FEATURE-RELATED INFORMATION STATUS:**
+- Visitor actions: ${hasVisitorActions ? '✓' : '✗ **ASK THIS IF MISSING**'}
+- Content management: ${hasContentManagement ? '✓' : '✗ **ASK THIS IF MISSING**'}
+- Integrations: ${hasIntegrations ? '✓' : '✗ **ASK THIS IF MISSING**'}
+- Ecommerce needs: ${intelligence?.ecommerce || intelligence?.needsEcommerce ? '✓' : '? **ASK IF RELEVANT**'}
+- Booking/Scheduling: ${intelligence?.booking || intelligence?.needsBooking ? '✓' : '? **ASK IF RELEVANT**'}
+- Membership/Access: ${intelligence?.membership || intelligence?.needsMembership ? '✓' : '? **ASK IF RELEVANT**'}
+- Media needs: ${intelligence?.media || intelligence?.needsMedia ? '✓' : '? **ASK IF RELEVANT**'}
+
+**ONLY trigger "recommend_features" when:**
+- You have gathered ALL feature-related information above
+- You understand the complete functionality needs
+- User has answered questions about visitor actions, integrations, content management, and other feature-determining factors
+- You can make intelligent feature recommendations
+
+**CURRENT TASK: Continue asking feature-related questions. Do NOT trigger recommend_features yet unless you have COMPLETE feature context.**
+` : `
 **CRITICAL: PACKAGE SELECTION SCREEN TRIGGER STATUS**
 Question Count: ${currentQuestionCount}
-${mustTriggerFeatures ? '🚨 **MANDATORY: You MUST use action: "select_packages" NOW - question count is >= 15 (package selection comes BEFORE features)**' : ''}
-${shouldTriggerFeatures && hasMinimumForFeatures ? '✅ **SHOULD trigger select_packages: question count >= 10 AND minimum info gathered**' : ''}
-${shouldTriggerFeatures && !hasMinimumForFeatures ? '⚠️ **Question count >= 10 but missing minimum info - gather essentials quickly then trigger**' : ''}
+${mustTriggerPackages ? '🚨 **MANDATORY: You MUST use action: "select_packages" NOW - question count is >= 15 (package selection comes BEFORE features)**' : ''}
+${shouldTriggerPackages && hasMinimumForPackages ? '✅ **SHOULD trigger select_packages: question count >= 10 AND minimum info gathered**' : ''}
+${shouldTriggerPackages && !hasMinimumForPackages ? '⚠️ **Question count >= 10 but missing minimum info - gather essentials quickly then trigger**' : ''}
 
-**MINIMUM INFO CHECKLIST FOR FEATURE SCREEN:**
+**MINIMUM INFO CHECKLIST FOR PACKAGE SELECTION:**
 - Business name: ${hasBusinessNameForFeatures ? '✓' : '✗'}
 - What business does: ${hasBusinessServices ? '✓' : '✗'}
 - Target audience: ${hasTargetAudience ? '✓' : '✗'}
@@ -1595,6 +1656,7 @@ ${shouldTriggerFeatures && !hasMinimumForFeatures ? '⚠️ **Question count >= 
 - Visitor actions: ${hasVisitorActions ? '✓' : '✗'}
 - Content management: ${hasContentManagement ? '✓' : '✗'}
 - Integrations: ${hasIntegrations ? '✓' : '✗ (optional)'}
+`}
 
 **PREVIOUSLY ASKED QUESTIONS (DO NOT ASK THESE AGAIN):**
 ${askedQuestions.length > 0 ? askedQuestions.map((q, i) => `${i + 1}. "${q}"`).join('\n') : 'None yet'}
@@ -1619,11 +1681,11 @@ ${askedQuestionTopics.has('complexity') ? '\n**Complexity/project complexity ask
 ${targetAudienceQuestions >= 1 ? `\n**Target audience: ${targetAudienceQuestions} question(s) - move on**` : ''}
 ${section4Questions >= 2 ? `\n**Section 4: ${section4Questions} questions - move on**` : ''}
 
-Task: ${mustTriggerFeatures ? '🚨 MANDATORY: Use action: "select_packages" NOW - question count >= 15 (package selection comes BEFORE features)' : shouldTriggerFeatures && hasMinimumForFeatures ? '✅ Use action: "select_packages" - you have minimum info and question count >= 10' : 'Determine next SCOPE.md section, evaluate sufficiency, generate next question.'}
+Task: ${packagesAlreadySelected ? (hasCompleteFeatureContext ? '✅ You have complete feature context - you MAY trigger "recommend_features" if ready' : '🔍 Continue asking feature-related questions - do NOT trigger recommend_features until you have COMPLETE feature context') : (mustTriggerPackages ? '🚨 MANDATORY: Use action: "select_packages" NOW - question count >= 15 (package selection comes BEFORE features)' : shouldTriggerPackages && hasMinimumForPackages ? '✅ Use action: "select_packages" - you have minimum info and question count >= 10' : 'Determine next SCOPE.md section, evaluate sufficiency, generate next question.')}
 Keep question SHORT (10-12 words), SIMPLE, DIRECT. ONE question only.
 **CRITICAL: NEVER ask duplicate questions - check the "PREVIOUSLY ASKED QUESTIONS" list above before generating a new question.**
 **CRITICAL: NEVER ask about security, SSL, compliance, or privacy features - these are handled automatically by Applicreations.**
-**CRITICAL: Focus on gathering functionality-related information quickly. Don't ask deep follow-ups - get essentials and move to feature screen.**
+${packagesAlreadySelected ? '**CRITICAL: Packages are selected - focus on feature-related questions (visitor actions, integrations, content management, ecommerce, booking, membership, media) before triggering recommend_features.**' : '**CRITICAL: Focus on gathering functionality-related information quickly. Don\'t ask deep follow-ups - get essentials and move to package selection.**'}
 Respond with valid JSON only.
 `
     }

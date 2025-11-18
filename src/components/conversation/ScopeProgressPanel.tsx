@@ -9,7 +9,7 @@ import type { ConversationFact } from '@/types/conversation'
 
 interface ScopeProgressPanelProps {
   progress: ScopeProgress
-  variant?: 'full' | 'compact' | 'minimal'
+  variant?: 'full' | 'compact' | 'minimal' | 'answers-only'
   collapsible?: boolean
   defaultExpanded?: boolean
   className?: string
@@ -31,6 +31,61 @@ export function ScopeProgressPanel({
     return (
       <div className={className}>
         <ScopeProgressBar progress={progress} />
+      </div>
+    )
+  }
+  
+  if (variant === 'answers-only') {
+    // Just the answered questions list, no progress bar
+    return (
+      <div className={`bg-white rounded-lg border border-gray-200 p-4 ${className}`}>
+        {collapsible ? (
+          <>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-900 transition-colors mb-4"
+            >
+              <span className="font-medium">Section Progress</span>
+              <ChevronDown 
+                className={`w-4 h-4 transition-transform ${
+                  isExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-4 border-t border-gray-200">
+                    {answeredQuestions.length > 0 ? (
+                      <AnsweredQuestionsList facts={answeredQuestions} />
+                    ) : (
+                      <div className="text-xs text-gray-400 text-center py-4">
+                        No questions answered yet
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        ) : (
+          <div>
+            {answeredQuestions.length > 0 ? (
+              <AnsweredQuestionsList facts={answeredQuestions} />
+            ) : (
+              <div className="text-xs text-gray-400 text-center py-4">
+                No questions answered yet
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }

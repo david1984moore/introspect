@@ -69,18 +69,62 @@ export interface QuestionValidation {
 }
 
 // Question Structure (V3.2)
-export interface Question {
-  id: string
-  text: string
-  inputType: 'radio' | 'checkbox' | 'text' | 'textarea' | 'file_upload'
-  options?: QuestionOption[]
-  category: string
-  scope_section?: string
-  scope_requirement?: string
-  placeholder?: string // For text input questions (Phase 5)
-  helperText?: string // Helper text displayed below question (e.g., "copy/paste website links below")
-  validation?: QuestionValidation // Phase 5
-}
+// Discriminated Union - Each variant is atomic and complete
+// Never compose from intersections - TypeScript can't guarantee discriminator alignment
+export type Question =
+  | {
+      id: string
+      text: string
+      inputType: 'radio'
+      options: QuestionOption[] // Required for radio
+      category: string
+      scope_section?: string
+      scope_requirement?: string
+      helperText?: string
+      validation?: QuestionValidation
+    }
+  | {
+      id: string
+      text: string
+      inputType: 'checkbox'
+      options: QuestionOption[] // Required for checkbox
+      category: string
+      scope_section?: string
+      scope_requirement?: string
+      helperText?: string
+      validation?: QuestionValidation
+    }
+  | {
+      id: string
+      text: string
+      inputType: 'text'
+      category: string
+      scope_section?: string
+      scope_requirement?: string
+      placeholder?: string
+      helperText?: string
+      validation?: QuestionValidation
+    }
+  | {
+      id: string
+      text: string
+      inputType: 'textarea'
+      category: string
+      scope_section?: string
+      scope_requirement?: string
+      placeholder?: string
+      helperText?: string
+      validation?: QuestionValidation
+    }
+  | {
+      id: string
+      text: string
+      inputType: 'file_upload'
+      category: string
+      scope_section?: string
+      scope_requirement?: string
+      helperText?: string
+    }
 
 // Claude Response (V3.2 - SCOPE.md-driven)
 export interface ClaudeResponse {

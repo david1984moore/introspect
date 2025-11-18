@@ -2,30 +2,30 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertCircle, CheckCircle2, Info, ChevronDown, Search } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Info, ChevronDown, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FeatureChip } from './FeatureChip'
 import { ScopeProgressPanel } from './ScopeProgressPanel'
 import { featureLibrary } from '@/lib/features/featureLibraryParser'
 import { recommendationEngine } from '@/lib/features/recommendationEngine'
+import { useConversationStore } from '@/stores/conversationStore'
 import type { Feature, FeatureConflict } from '@/lib/features/featureLibraryParser'
 import type { ConversationIntelligence } from '@/types/conversation'
 import type { ScopeProgress } from '@/types/scopeProgress'
 import type { ConversationFact } from '@/types/conversation'
 
 // Feature selection limits per package
-const PACKAGE_FEATURE_LIMITS: Record<'starter' | 'professional' | 'custom' | null, number | null> = {
+const PACKAGE_FEATURE_LIMITS: Record<'starter' | 'professional' | 'custom', number | null> = {
   starter: 3,
   professional: 5,
   custom: null, // Unlimited
-  null: null
 }
 
 interface FeatureChipGridProps {
   intelligence: ConversationIntelligence
   packageTier: string
-  onSubmit: (selectedFeatureIds: string[]) => void
+  onSubmit: (selectedFeatureIds: string[]) => Promise<void>
   isSubmitting?: boolean
   selectedWebsitePackage?: 'starter' | 'professional' | 'custom' | null
   selectedHostingPackage?: 'basic' | 'standard' | 'premium' | 'none'
@@ -97,21 +97,97 @@ export function FeatureChipGrid({
     )
   }, [featuresByCategory, packageTierName])
   
-  // Filter features based on search query
+  // Search synonyms/aliases mapping for better search matching
+  const searchSynonyms: Record<string, string[]> = {
+    'user authentication': ['user authentication', 'authentication', 'login', 'user login', 'account', 'accounts', 'user account', 'user accounts'],
+    'authentication': ['authentication', 'user authentication', 'login', 'user login', 'auth'],
+    'login': ['login', 'user login', 'authentication', 'user authentication', 'sign in', 'signin'],
+    'user login': ['user login', 'login', 'authentication', 'user authentication'],
+    'account': ['account', 'accounts', 'user account', 'user accounts', 'user authentication'],
+    'accounts': ['accounts', 'account', 'user account', 'user accounts', 'user authentication'],
+  }
+  
+  // Normalize search query and expand with synonyms
+  const normalizeSearchQuery = (query: string): string[] => {
+    const normalized = query.toLowerCase().trim()
+    const terms: string[] = [normalized]
+    
+    // Add synonyms if exact match found
+    if (searchSynonyms[normalized]) {
+      terms.push(...searchSynonyms[normalized])
+    }
+    
+    // Also check if query contains any synonym keys (for partial matches)
+    Object.entries(searchSynonyms).forEach(([key, synonyms]) => {
+      // Check if query contains the key or any of its synonyms
+      const queryWords = normalized.split(/\s+/)
+      const keyWords = key.split(/\s+/)
+      
+      // If all words from key are in query, add synonyms
+      if (keyWords.every(word => queryWords.some(qw => qw.includes(word) || word.includes(qw)))) {
+        terms.push(...synonyms)
+      }
+      
+      // Also check if any synonym is in the query
+      if (synonyms.some(syn => {
+        const synWords = syn.split(/\s+/)
+        return synWords.every(word => queryWords.some(qw => qw.includes(word) || word.includes(qw)))
+      })) {
+        terms.push(...synonyms)
+      }
+    })
+    
+    // Add individual words from multi-word queries
+    const words = normalized.split(/\s+/).filter(w => w.length > 2)
+    terms.push(...words)
+    
+    return [...new Set(terms)] // Remove duplicates
+  }
+  
+  // Filter features based on search query with improved matching
   const filteredFeaturesByCategory = useMemo(() => {
     if (!searchQuery.trim()) {
       return featuresByCategory
     }
     
-    const query = searchQuery.toLowerCase().trim()
+    const searchTerms = normalizeSearchQuery(searchQuery)
     const filtered: Record<string, Feature[]> = {}
     
     Object.entries(featuresByCategory).forEach(([category, features]) => {
-      const matchingFeatures = features.filter(feature => 
-        feature.name.toLowerCase().includes(query) ||
-        feature.description.toLowerCase().includes(query) ||
-        feature.tags?.some(tag => tag.toLowerCase().includes(query))
-      )
+      const matchingFeatures = features.filter(feature => {
+        const featureName = feature.name.toLowerCase()
+        const featureDesc = feature.description.toLowerCase()
+        const featureTags = feature.tags?.map(tag => tag.toLowerCase()) || []
+        
+        // Check if any search term matches
+        return searchTerms.some(term => {
+          // Match in name (word boundary aware)
+          if (featureName.includes(term) || 
+              featureName.split(/\s+/).some(word => word.startsWith(term)) ||
+              term.split(/\s+/).every(word => featureName.includes(word))) {
+            return true
+          }
+          
+          // Match in description
+          if (featureDesc.includes(term) ||
+              term.split(/\s+/).every(word => featureDesc.includes(word))) {
+            return true
+          }
+          
+          // Match in tags
+          if (featureTags.some(tag => tag.includes(term) || term.includes(tag))) {
+            return true
+          }
+          
+          // Match feature ID (for cases like "user_authentication")
+          const featureId = feature.id.toLowerCase().replace(/_/g, ' ')
+          if (featureId.includes(term) || term.split(/\s+/).every(word => featureId.includes(word))) {
+            return true
+          }
+          
+          return false
+        })
+      })
       
       if (matchingFeatures.length > 0) {
         filtered[category] = matchingFeatures
@@ -138,7 +214,41 @@ export function FeatureChipGrid({
   
   // Conflicts and dependencies
   const [conflicts, setConflicts] = useState<FeatureConflict[]>([])
-  const [dependencyIssues, setDependencyIssues] = useState<string[]>([])
+  const [dependencyIssues, setDependencyIssues] = useState<Array<{
+    feature: Feature
+    missingDeps: Feature[]
+  }>>([])
+  
+  // Error state for submission errors
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
+  
+  // Get orchestrationError from store
+  const orchestrationError = useConversationStore((state) => state.orchestrationError)
+  
+  // Sync orchestrationError with local error state
+  useEffect(() => {
+    if (orchestrationError) {
+      setSubmissionError(orchestrationError)
+    }
+  }, [orchestrationError])
+  
+  // Get feature selection limit for current package (moved before useEffect that uses it)
+  const maxFeatureSelections = useMemo(() => {
+    return selectedWebsitePackage ? PACKAGE_FEATURE_LIMITS[selectedWebsitePackage] : null
+  }, [selectedWebsitePackage])
+  
+  // Clear error when selection changes (user is fixing the issue)
+  useEffect(() => {
+    if (submissionError) {
+      // Clear error when user modifies selection
+      const addonCount = Array.from(selectedFeatures).filter(id => !includedFeatureIds.includes(id)).length
+      if (maxFeatureSelections === null || addonCount <= (maxFeatureSelections || 0)) {
+        setSubmissionError(null)
+        // Also clear orchestrationError in store
+        useConversationStore.setState({ orchestrationError: null })
+      }
+    }
+  }, [selectedFeatures, submissionError, maxFeatureSelections, includedFeatureIds])
   
   // Calculate pricing including package base price
   const pricing = useMemo(() => {
@@ -175,11 +285,6 @@ export function FeatureChipGrid({
     }
   }, [selectedFeatures, packageTierName, selectedWebsitePackage, selectedHostingPackage])
   
-  // Get feature selection limit for current package
-  const maxFeatureSelections = useMemo(() => {
-    return selectedWebsitePackage ? PACKAGE_FEATURE_LIMITS[selectedWebsitePackage] : null
-  }, [selectedWebsitePackage])
-  
   // Count only addon features (exclude included features from count)
   const addonFeatureCount = useMemo(() => {
     return Array.from(selectedFeatures).filter(id => !includedFeatureIds.includes(id)).length
@@ -199,14 +304,10 @@ export function FeatureChipGrid({
     const detectedConflicts = featureLibrary.detectConflicts(selectedArray)
     setConflicts(detectedConflicts)
     
-    // Check dependencies
+    // Check dependencies - store full feature objects for display
     const validation = featureLibrary.validateDependencies(selectedArray)
     if (!validation.valid) {
-      const issues = validation.missingDependencies.map(
-        ({ feature, missingDeps }) =>
-          `${feature.name} requires: ${missingDeps.map(d => d.name).join(', ')}`
-      )
-      setDependencyIssues(issues)
+      setDependencyIssues(validation.missingDependencies)
     } else {
       setDependencyIssues([])
     }
@@ -236,7 +337,11 @@ export function FeatureChipGrid({
     })
   }
   
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // Clear any previous errors
+    setSubmissionError(null)
+    useConversationStore.setState({ orchestrationError: null })
+    
     if (conflicts.length > 0 || dependencyIssues.length > 0) {
       // Show validation errors - don't allow submission
       return
@@ -251,8 +356,34 @@ export function FeatureChipGrid({
     
     // Submit all selected features (including included ones)
     if (selectedFeatures.size > 0) {
-      onSubmit(Array.from(selectedFeatures))
+      try {
+        await onSubmit(Array.from(selectedFeatures))
+        // Clear error on successful submission
+        setSubmissionError(null)
+      } catch (error) {
+        // Handle error from onSubmit
+        const errorMessage = error instanceof Error ? error.message : 'Failed to submit feature selection. Please try again.'
+        setSubmissionError(errorMessage)
+        console.error('Feature selection submission error:', error)
+      }
     }
+  }
+  
+  // Handle adding required dependency features
+  const handleAddDependency = (featureId: string) => {
+    // Check if we can add it (not at limit)
+    const currentAddonCount = Array.from(selectedFeatures).filter(id => !includedFeatureIds.includes(id)).length
+    if (maxFeatureSelections !== null && currentAddonCount >= maxFeatureSelections) {
+      // Can't add - at limit
+      return
+    }
+    
+    // Add the dependency feature
+    setSelectedFeatures(prev => {
+      const next = new Set(prev)
+      next.add(featureId)
+      return next
+    })
   }
   
   const canSubmit = 
@@ -293,11 +424,18 @@ export function FeatureChipGrid({
   const [isCalculatorExpanded, setIsCalculatorExpanded] = useState(true)
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 py-2">
+    <div className="w-full max-w-7xl mx-auto px-3 py-2 overflow-visible">
       {/* 2-column layout: Calculator/Progress on LEFT, Features on RIGHT */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start overflow-visible">
         {/* Left Column - Pricing Calculator & Progress Panel (positioned FIRST/LEFT) */}
-        <div className="lg:col-span-4 space-y-2 order-1 lg:sticky lg:top-4 lg:self-start">
+        <div className="lg:col-span-4 order-1 overflow-visible">
+          <div className="lg:sticky lg:z-30 space-y-2" style={{ 
+            position: 'sticky',
+            top: '5rem',
+            alignSelf: 'flex-start',
+            height: 'fit-content',
+            maxHeight: 'calc(100vh - 5rem)'
+          }}>
           {/* Pricing Calculator - Compact */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -401,6 +539,7 @@ export function FeatureChipGrid({
               </AnimatePresence>
             </div>
           </motion.div>
+          </div>
         </div>
 
         {/* Right Column - Features (positioned SECOND/RIGHT) */}
@@ -475,6 +614,7 @@ export function FeatureChipGrid({
           <AnimatePresence>
             {isLimitReached && maxFeatureSelections !== null && (
               <motion.div
+                key="limit-reached"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -491,6 +631,7 @@ export function FeatureChipGrid({
             
             {conflicts.length > 0 && (
               <motion.div
+                key="conflicts"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -511,25 +652,112 @@ export function FeatureChipGrid({
             
             {dependencyIssues.length > 0 && (
               <motion.div
+                key="dependency-issues"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className="p-1.5 bg-yellow-50 border border-yellow-200 rounded text-[10px]"
               >
-                <div className="flex items-start gap-1.5">
-                  <Info className="w-3 h-3 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <ul className="space-y-0.5 text-yellow-700">
-                    {dependencyIssues.map((issue, idx) => (
-                      <li key={idx}>{issue}</li>
-                    ))}
-                  </ul>
+                <div className="space-y-1.5">
+                  {dependencyIssues.map(({ feature, missingDeps }, idx) => (
+                    <div key={`${feature.id}-${idx}`} className="space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <Info className="w-3 h-3 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-yellow-700 font-medium">
+                            {feature.name} requires:
+                          </p>
+                        </div>
+                      </div>
+                      {/* Required features as clickable chips */}
+                      <div className="ml-4 flex flex-wrap gap-1">
+                        {missingDeps.map(depFeature => {
+                          const isAlreadySelected = selectedFeatures.has(depFeature.id)
+                          const isIncluded = includedFeatureIds.includes(depFeature.id)
+                          const canAdd = !isAlreadySelected && 
+                                        (maxFeatureSelections === null || 
+                                         addonFeatureCount < maxFeatureSelections)
+                          
+                          return (
+                            <button
+                              key={depFeature.id}
+                              onClick={() => canAdd && handleAddDependency(depFeature.id)}
+                              disabled={!canAdd || isAlreadySelected}
+                              className={`
+                                inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium
+                                transition-all
+                                ${isAlreadySelected || isIncluded
+                                  ? 'bg-green-100 text-green-700 cursor-default'
+                                  : canAdd
+                                  ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer border border-yellow-300'
+                                  : 'bg-gray-100 text-gray-500 cursor-not-allowed opacity-50'
+                                }
+                              `}
+                              title={isAlreadySelected || isIncluded 
+                                ? 'Already selected' 
+                                : canAdd 
+                                ? `Click to add ${depFeature.name}` 
+                                : 'Limit reached'}
+                            >
+                              {isAlreadySelected || isIncluded ? (
+                                <>
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  {depFeature.name}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-yellow-600">+</span>
+                                  {depFeature.name}
+                                </>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+            
+            {/* Submission Error Display */}
+            {submissionError && (
+              <motion.div
+                key="submission-error"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-4 bg-red-50 border-2 border-red-300 rounded-lg"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-red-900 mb-1">
+                      Feature Selection Error
+                    </h3>
+                    <p className="text-sm text-red-700 mb-3">
+                      {submissionError}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSubmissionError(null)
+                        useConversationStore.setState({ orchestrationError: null })
+                      }}
+                      className="text-red-700 border-red-300 hover:bg-red-100"
+                    >
+                      <X className="w-4 h-4 mr-1.5" />
+                      Dismiss
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
           
           {/* Feature categories - Show filtered features */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 pb-8">
             {categoryOrder.map(categoryKey => {
               const features = filteredFeaturesByCategory[categoryKey as keyof typeof filteredFeaturesByCategory]
               if (!features || features.length === 0) return null
@@ -571,20 +799,20 @@ export function FeatureChipGrid({
               )
             })}
           </div>
+          
+          {/* Continue Button - Bottom of Features Section */}
+          <div className="pb-4">
+            <Button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              size="lg"
+              className="w-full"
+            >
+              {isSubmitting ? 'Submitting...' : 'Continue'}
+            </Button>
+          </div>
         </div>
 
-      </div>
-      
-      {/* Continue Button - Bottom of Page */}
-      <div className="mt-6 pb-4 flex justify-center">
-        <Button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          size="lg"
-          className="min-w-[200px]"
-        >
-          {isSubmitting ? 'Submitting...' : 'Continue'}
-        </Button>
       </div>
     </div>
   )

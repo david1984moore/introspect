@@ -493,7 +493,7 @@ export default function FoundationForm() {
             <div className="sticky top-8 space-y-6">
               <ScopeProgressPanel
                 progress={scopeProgress}
-                variant="compact"
+                variant="answers-only"
                 collapsible
                 defaultExpanded={false}
                 answeredQuestions={getAllFacts()}

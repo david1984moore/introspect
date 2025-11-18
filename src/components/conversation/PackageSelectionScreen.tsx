@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PriceCalculator } from './PriceCalculator'
+import { Checkbox } from '@/components/ui/checkbox'
+import { CompactPriceCalculator } from './CompactPriceCalculator'
 
 export type WebsitePackage = 'starter' | 'professional' | 'custom'
 export type HostingPackage = 'basic' | 'pro' | 'premium' | 'none'
@@ -168,6 +169,7 @@ export function PackageSelectionScreen({
   const [selectedWebsitePackage, setSelectedWebsitePackage] = useState<WebsitePackage | null>(null)
   const [selectedHostingPackage, setSelectedHostingPackage] = useState<HostingPackage>('none')
   const [hostingDuration, setHostingDuration] = useState<HostingDuration>(3)
+  const [paymentBannerMinimized, setPaymentBannerMinimized] = useState(false)
   
   // OPTION B: Object-based state for card expansion - ensures complete isolation per card
   // Each card has its own key in the Record, allowing independent state management
@@ -249,6 +251,54 @@ export function PackageSelectionScreen({
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-0">
+      {/* Important Information Banner */}
+      <div className="mb-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 max-w-4xl mx-auto">
+          <h3 
+            className={`text-lg font-semibold text-gray-900 ${paymentBannerMinimized ? 'mb-0 cursor-pointer hover:text-blue-700' : 'mb-3'}`}
+            onClick={() => paymentBannerMinimized && setPaymentBannerMinimized(false)}
+          >
+            No Payment Required - This is Just for Planning
+          </h3>
+          <AnimatePresence>
+            {!paymentBannerMinimized && (
+              <motion.div
+                initial={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-2 text-sm text-gray-700 leading-relaxed">
+                  <p>
+                    <strong>Important:</strong> Choosing which website package is right for you is <strong>not a commitment to pay</strong> during this form process. This selection simply helps us understand what kind of website preview to build for you.
+                  </p>
+                  <p>
+                    <strong>No payment is due</strong> upon completion of this form, or at any point during your Introspect experience. The pricing estimates shown are accurate and transparent, but you won't be charged anything right now.
+                  </p>
+                  <p>
+                    Here's how it works: Introspect gathers all the requirements needed to build your website. Once we have your website requirements, we hand it off to our development team at Applicreations, where real developers will create a working prototype of your website.
+                  </p>
+                  <p>
+                    <strong>Timeline:</strong> In most simpler websites, the website preview will be delivered in 48 hours or less. Other more complicated sites will require more time and attention to make sure we achieve not just a working product, but one that exceeds your standards and may not hit the 48 hour window. Applicreations will always communicate estimated timelines. After you review your prototype, if you approve and want to move forward, Applicreations will begin finalizing development and polishing your site. <strong>That's when your first payment would be due</strong> - only after you've seen and approved your actual prototype.
+                  </p>
+                </div>
+                <div className="mt-4 pt-4 border-t border-blue-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={paymentBannerMinimized}
+                      onCheckedChange={(checked) => setPaymentBannerMinimized(checked === true)}
+                    />
+                    <span className="text-sm text-gray-700 font-medium">
+                      I understand no payment is due today
+                    </span>
+                  </label>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
       {/* Website Packages */}
       <div className="mb-8">
         {/* VERTICAL STACK - Horizontal cards stacked vertically */}
@@ -757,6 +807,20 @@ export function PackageSelectionScreen({
           </p>
         </div>
       </div>
+
+      {/* Price Calculator */}
+      {selectedWebsitePackage && (
+        <div className="mb-6 flex justify-center">
+          <div className="w-full max-w-md">
+            <CompactPriceCalculator
+              websitePackage={selectedWebsitePackage}
+              hostingPackage={selectedHostingPackage}
+              hostingDuration={hostingDuration}
+              defaultExpanded={true}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Continue Button */}
       <div className="mt-6 flex justify-center">

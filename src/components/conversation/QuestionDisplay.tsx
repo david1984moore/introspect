@@ -112,10 +112,10 @@ export function QuestionDisplay({
   
   // Sync selectedRadioValue with selectedOptionId if selectedOptionId is set but selectedRadioValue is not
   useEffect(() => {
-    if (selectedOptionId && !selectedRadioValue && question.inputType === 'radio' && question.options && question.options.length > 2) {
+    if (selectedOptionId && !selectedRadioValue && question.inputType === 'radio' && question.options.length > 2) {
       setSelectedRadioValue(selectedOptionId)
     }
-  }, [selectedOptionId, selectedRadioValue, question.inputType, question.options])
+  }, [selectedOptionId, selectedRadioValue, question])
   
   // Track question changes to force entrance animations
   // CRITICAL FIX: Always detect new questions by comparing question IDs
@@ -233,8 +233,8 @@ export function QuestionDisplay({
       return
     }
     
-    // Validate against question rules if present
-    if (question.validation) {
+    // Validate against question rules if present (only for text/textarea types)
+    if ((question.inputType === 'text' || question.inputType === 'textarea') && question.validation) {
       const { minLength, maxLength, pattern } = question.validation
       
       if (minLength && textValue.length < minLength) {
@@ -269,7 +269,7 @@ export function QuestionDisplay({
   }
   
   return (
-    <div className={`max-w-2xl mx-auto px-4 ${className}`}>
+    <div className={className}>
       {/* Context Summary removed - no longer displayed */}
       
       {/* Question card with enhanced animations */}
@@ -293,7 +293,7 @@ export function QuestionDisplay({
           style={{
             pointerEvents: isExiting ? 'none' : undefined,
           }}
-          className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
+          className="bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col w-full max-w-4xl mx-auto"
           role="region"
           aria-labelledby={`question-${question.id}`}
           tabIndex={-1}
@@ -305,7 +305,7 @@ export function QuestionDisplay({
           }}
         >
             {/* Question header */}
-            <div className="p-6 border-b border-gray-100">
+            <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <motion.h2 
                 id={`question-${question.id}`}
                 initial={{ opacity: 0, y: 12 }}
@@ -315,19 +315,19 @@ export function QuestionDisplay({
                   duration: adjustedTimings.QUESTION_TEXT_DURATION / 1000,
                   ease: EASINGS.IN_OUT,
                 } : { duration: 0 }}
-                className="text-2xl font-semibold text-gray-900 leading-tight"
+                className="text-xl font-semibold text-gray-900 leading-tight"
               >
                 {question.text}
               </motion.h2>
           {/* Helper text */}
           {question.helperText && (
-            <p className="text-sm text-gray-600 mt-3">
+            <p className="text-sm text-gray-600 mt-2 mb-1">
               {question.helperText}
             </p>
           )}
           {/* Dynamic helper text for radio questions */}
-          {question.inputType === 'radio' && question.options && (
-            <p className="text-sm text-gray-500 mt-3">
+          {question.inputType === 'radio' && (
+            <p className="text-sm text-gray-500 mt-2 mb-1">
               {question.options.length === 2 
                 ? 'Choose only 1'
                 : question.options.length > 2
@@ -338,44 +338,24 @@ export function QuestionDisplay({
         </div>
         
             {/* Question body */}
-            <div className="p-6">
-              {question.inputType === 'radio' && question.options ? (
+            <div className={`px-6 py-4 ${question.inputType === 'radio' ? 'flex-shrink-0' : 'flex-1 min-h-0'}`}>
+              {question.inputType === 'radio' ? (
                 // Multiple choice options
-                <>
-                  <OptionSelector
-                    options={question.options}
-                    onSelect={question.options.length === 2 
-                      ? onAnswer // Immediate submission for 2 options
-                      : (value) => setSelectedRadioValue(value) // Delayed submission for >2 options
-                    }
-                    disabled={isSubmitting}
-                    selectedValue={selectedRadioValue || selectedOptionId || undefined}
-                    animationPhase={animationPhase}
-                    firstOptionRef={firstOptionRef}
-                    immediateSubmit={question.options.length === 2}
-                  />
-                  {/* Continue button for radio questions with more than 2 options - always visible */}
-                  {question.options.length > 2 && (
-                    <div className="mt-6">
-                      <Button
-                        onClick={() => {
-                          const valueToSubmit = selectedRadioValue || selectedOptionId || ''
-                          if (valueToSubmit) {
-                            onAnswer(valueToSubmit)
-                          }
-                        }}
-                        disabled={isSubmitting || !(selectedRadioValue || selectedOptionId)}
-                        className="w-full"
-                        size="lg"
-                      >
-                        {isSubmitting ? 'Submitting...' : 'Continue'}
-                      </Button>
-                    </div>
-                  )}
-                </>
+                <OptionSelector
+                  options={question.options}
+                  onSelect={question.options.length === 2 
+                    ? onAnswer // Immediate submission for 2 options
+                    : (value) => setSelectedRadioValue(value) // Delayed submission for >2 options
+                  }
+                  disabled={isSubmitting}
+                  selectedValue={selectedRadioValue || selectedOptionId || undefined}
+                  animationPhase={animationPhase}
+                  firstOptionRef={firstOptionRef}
+                  immediateSubmit={question.options.length === 2}
+                />
               ) : question.inputType === 'text' ? (
                 // Text input (for truly unique data like names, emails)
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div>
                     <input
                       ref={textInputRef}
@@ -392,8 +372,8 @@ export function QuestionDisplay({
                       aria-describedby={error ? `input-error-${question.id}` : undefined}
                       aria-invalid={error ? 'true' : 'false'}
                       className={`
-                        flex h-10 w-full rounded-lg border transition-colors
-                        pl-2 pr-4 text-base text-gray-900
+                        flex h-10 w-full rounded-lg border transition-colors text-sm
+                        px-4 text-gray-900
                         focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:border-transparent
                         disabled:opacity-50 disabled:cursor-not-allowed
                         placeholder:text-gray-400
@@ -403,53 +383,31 @@ export function QuestionDisplay({
                         }
                       `}
                     />
-                
-                {/* Validation error */}
-                {error && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    id={`input-error-${question.id}`}
-                    className="text-sm text-red-600 mt-2"
-                    role="alert"
-                  >
-                    {error}
-                  </motion.p>
-                )}
-                
-                {/* Character count if maxLength specified */}
-                {question.validation?.maxLength && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    {textValue.length} / {question.validation.maxLength} characters
-                  </p>
-                )}
-              </div>
-              
-              <Button
-                onClick={handleTextSubmit}
-                disabled={isSubmitting || !textValue.trim()}
-                className="w-full"
-                size="lg"
-              >
-                {isSubmitting ? 'Submitting...' : 'Continue'}
-              </Button>
-              
-              {/* Skip button for optional text questions */}
-              <Button
-                onClick={() => {
-                  // Submit empty answer to skip
-                  onAnswer('')
-                }}
-                disabled={isSubmitting}
-                variant="ghost"
-                className="w-full"
-              >
-                Skip
-              </Button>
-            </div>
+                  </div>
+                  
+                  {/* Validation error */}
+                  {error && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      id={`input-error-${question.id}`}
+                      className="text-sm text-red-600 mt-2"
+                      role="alert"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                  
+                  {/* Character count if maxLength specified */}
+                  {question.inputType === 'text' && question.validation?.maxLength && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      {textValue.length} / {question.validation.maxLength} characters
+                    </p>
+                  )}
+                </div>
               ) : question.inputType === 'textarea' ? (
                 // Textarea input (for multiple URLs or longer text)
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div>
                     <textarea
                       ref={textareaRef}
@@ -461,12 +419,12 @@ export function QuestionDisplay({
                       onKeyDown={handleTextKeyDown}
                       placeholder={question.placeholder || 'Enter your answer...'}
                       disabled={isSubmitting}
-                      rows={question.helperText?.toLowerCase().includes('url') || question.helperText?.toLowerCase().includes('link') ? 6 : 3}
+                      rows={question.helperText?.toLowerCase().includes('url') || question.helperText?.toLowerCase().includes('link') ? 4 : 3}
                       aria-label={question.text}
                       aria-describedby={error ? `textarea-error-${question.id}` : undefined}
                       aria-invalid={error ? 'true' : 'false'}
                       className={`
-                        w-full px-4 py-3 rounded-lg border transition-colors resize-none
+                        w-full px-4 py-3 rounded-lg border transition-colors resize-none text-sm
                         focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
                         disabled:opacity-50 disabled:cursor-not-allowed
                         ${error 
@@ -475,52 +433,103 @@ export function QuestionDisplay({
                         }
                       `}
                     />
-                
-                {/* Validation error */}
-                {error && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    id={`textarea-error-${question.id}`}
-                    className="text-sm text-red-600 mt-2"
-                    role="alert"
-                  >
-                    {error}
-                  </motion.p>
-                )}
-                
-                {/* Character count if maxLength specified */}
-                {question.validation?.maxLength && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    {textValue.length} / {question.validation.maxLength} characters
-                  </p>
-                )}
-              </div>
-              
-              <Button
-                onClick={handleTextSubmit}
-                disabled={isSubmitting || !textValue.trim()}
-                className="w-full"
-                size="lg"
-              >
-                {isSubmitting ? 'Submitting...' : 'Continue'}
-              </Button>
-              
-              {/* Skip button for optional textarea questions */}
-              <Button
-                onClick={() => {
-                  // Submit empty answer to skip
-                  onAnswer('')
-                }}
-                disabled={isSubmitting}
-                variant="ghost"
-                className="w-full"
-              >
-                Skip
-              </Button>
-            </div>
+                  </div>
+                  
+                  {/* Validation error */}
+                  {error && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      id={`textarea-error-${question.id}`}
+                      className="text-sm text-red-600 mt-2"
+                      role="alert"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                  
+                  {/* Character count if maxLength specified */}
+                  {question.inputType === 'textarea' && question.validation?.maxLength && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      {textValue.length} / {question.validation.maxLength} characters
+                    </p>
+                  )}
+                </div>
               ) : null}
             </div>
+            
+            {/* Buttons Footer */}
+            {(question.inputType === 'radio' && question.options.length > 2) ||
+             question.inputType === 'text' ||
+             question.inputType === 'textarea' ? (
+              <div className="px-6 pt-4 pb-5 border-t border-gray-100 space-y-2.5 flex-shrink-0">
+                {/* Continue button for radio questions with more than 2 options */}
+                {question.inputType === 'radio' && question.options.length > 2 && (
+                  <Button
+                    onClick={() => {
+                      const valueToSubmit = selectedRadioValue || selectedOptionId || ''
+                      if (valueToSubmit) {
+                        onAnswer(valueToSubmit)
+                      }
+                    }}
+                    disabled={isSubmitting || !(selectedRadioValue || selectedOptionId)}
+                    className="w-full h-12 text-base font-semibold"
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Continue'}
+                  </Button>
+                )}
+                
+                {/* Continue button for text questions */}
+                {question.inputType === 'text' && (
+                  <>
+                    <Button
+                      onClick={handleTextSubmit}
+                      disabled={isSubmitting || !textValue.trim()}
+                      className="w-full h-12 text-base font-semibold"
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Continue'}
+                    </Button>
+                    {/* Skip button for optional text questions */}
+                    <Button
+                      onClick={() => {
+                        // Submit empty answer to skip
+                        onAnswer('')
+                      }}
+                      disabled={isSubmitting}
+                      variant="ghost"
+                      className="w-full h-9 text-sm"
+                    >
+                      Skip
+                    </Button>
+                  </>
+                )}
+                
+                {/* Continue button for textarea questions */}
+                {question.inputType === 'textarea' && (
+                  <>
+                    <Button
+                      onClick={handleTextSubmit}
+                      disabled={isSubmitting || !textValue.trim()}
+                      className="w-full h-12 text-base font-semibold"
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Continue'}
+                    </Button>
+                    {/* Skip button for optional textarea questions */}
+                    <Button
+                      onClick={() => {
+                        // Submit empty answer to skip
+                        onAnswer('')
+                      }}
+                      disabled={isSubmitting}
+                      variant="ghost"
+                      className="w-full h-9 text-sm"
+                    >
+                      Skip
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : null}
           </motion.div>
         )}
     </div>
